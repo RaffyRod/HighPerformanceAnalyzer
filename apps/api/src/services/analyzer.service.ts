@@ -1418,13 +1418,17 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
                               ? labels.opportunityNeedsWork
                               : labels.opportunityCritical
                         const expected = getOpportunityTarget(item.title, lang)
+                        const currentClass =
+                          statusClass === 'good' ? 'op-current-pass' : 'op-current-fail'
+                        const statusTextClass =
+                          statusClass === 'good' ? 'op-status-pass' : 'op-status-fail'
 
                         return `<li class="opportunity-item">
                           <div class="opportunity-head">
                             <b>${item.title}</b>
                             <span class="op-badge ${statusClass}">${statusLabel}</span>
                           </div>
-                          <div class="muted">${labels.opportunityStatus}: ${statusLabel} | ${labels.opportunityCurrent}: ${item.detail} | ${labels.opportunityExpected}: ${expected}</div>
+                          <div class="muted">${labels.opportunityStatus}: <span class="${statusTextClass}">${statusLabel}</span> | ${labels.opportunityCurrent}: <span class="${currentClass}">${item.detail}</span> | ${labels.opportunityExpected}: ${expected}</div>
                         </li>`
                       })
                       .join('')
@@ -1583,6 +1587,10 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
       .op-badge.good { background: #ecfdf3; color: #166534; border: 1px solid #bbf7d0; }
       .op-badge.average { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
       .op-badge.poor { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+      .op-status-pass { color: #16a34a; font-weight: 800; text-shadow: 0 0 8px rgb(22 163 74 / 35%); }
+      .op-status-fail { color: #dc2626; font-weight: 800; text-shadow: 0 0 8px rgb(220 38 38 / 35%); }
+      .op-current-pass { color: #16a34a; font-weight: 800; text-shadow: 0 0 8px rgb(22 163 74 / 35%); }
+      .op-current-fail { color: #dc2626; font-weight: 800; text-shadow: 0 0 8px rgb(220 38 38 / 35%); }
       .shot { width: 100%; max-width: 860px; border-radius: 8px; border: 1px solid #e2e8f0; }
       @media (max-width: 960px) { .overview { grid-template-columns: 1fr; } .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .hero-grid { grid-template-columns: 1fr; } }
     </style>

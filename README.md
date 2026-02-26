@@ -16,6 +16,11 @@ Analyze any website with Lighthouse + load checks, discover internal URLs, and g
 - 🟥🟩 Opportunity status colors:
   - Red when metric fails expected threshold
   - Green when metric passes expected threshold
+- ✅❌ Opportunity readability upgrades:
+  - Fail items listed first, pass items after
+  - Compact side-by-side cards on desktop
+  - Bright status emphasis for `Status` and `Current`
+  - Prominent "Open HTML report" CTA in app results
 - 🕒 Before/after comparison against previous runs
 - 🗂️ Report retention:
   - Stored in `reports/`

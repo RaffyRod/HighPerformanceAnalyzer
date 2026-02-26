@@ -60,6 +60,19 @@ const getOpportunityStatus = (
   return 'average'
 }
 
+const isOpportunityFailed = (title: string, detail: string, score: number | null): boolean =>
+  getOpportunityStatus(title, detail, score) !== 'good'
+
+const getSortedOpportunities = (
+  opportunities: AnalyzeApiResponse['results'][number]['opportunities'],
+) =>
+  [...opportunities].sort((left, right) => {
+    const leftFailed = isOpportunityFailed(left.title, left.detail, left.score)
+    const rightFailed = isOpportunityFailed(right.title, right.detail, right.score)
+    if (leftFailed !== rightFailed) return leftFailed ? -1 : 1
+    return left.title.localeCompare(right.title)
+  })
+
 const scoreSummary = (() => {
   if (!props.report.results.length) return 0
   const average =
@@ -82,8 +95,14 @@ const scoreSummary = (() => {
         <p>
           <strong>{{ t('discoveredUrls') }}:</strong> {{ report.discoveredUrls.length }}
         </p>
-        <a class="report-link" :href="report.htmlReportPath" target="_blank" rel="noreferrer">
-          {{ t('openHtml') }}
+        <a
+          class="report-link report-link-cta"
+          :href="report.htmlReportPath"
+          target="_blank"
+          rel="noreferrer"
+        >
+          <span>{{ t('openHtml') }}</span>
+          <span aria-hidden="true">↗</span>
         </a>
       </div>
     </div>
@@ -144,27 +163,38 @@ const scoreSummary = (() => {
       </p>
       <ul class="result-list opportunity-list">
         <li
-          v-for="opportunity in result.opportunities"
+          v-for="opportunity in getSortedOpportunities(result.opportunities)"
           :key="opportunity.title + opportunity.detail"
         >
           <div class="opportunity-head">
             <strong>{{ opportunity.title }}</strong>
-            <span
-              class="status-dot"
-              :class="
-                getOpportunityStatus(opportunity.title, opportunity.detail, opportunity.score)
-              "
-            >
-              {{
-                getOpportunityStatus(opportunity.title, opportunity.detail, opportunity.score) ===
-                'good'
-                  ? t('pass')
-                  : t('fail')
-              }}
-            </span>
           </div>
           <div class="opportunity-detail">
-            {{ t('current') }}: {{ opportunity.detail }} | {{ t('expected') }}:
+            <span
+              v-if="isOpportunityFailed(opportunity.title, opportunity.detail, opportunity.score)"
+            >
+              ❌
+            </span>
+            <span v-else class="pass-emoji">✅</span>
+            {{ t('current') }}:
+            <span
+              class="current-value"
+              :class="{
+                failed: isOpportunityFailed(
+                  opportunity.title,
+                  opportunity.detail,
+                  opportunity.score,
+                ),
+                passed: !isOpportunityFailed(
+                  opportunity.title,
+                  opportunity.detail,
+                  opportunity.score,
+                ),
+              }"
+            >
+              {{ opportunity.detail }}
+            </span>
+            | {{ t('expected') }}:
             {{ getOpportunityExpected(opportunity.title) }}
           </div>
         </li>
@@ -192,6 +222,31 @@ const scoreSummary = (() => {
   gap: 10px;
   flex-wrap: wrap;
   align-items: center;
+}
+
+.report-link-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #0f172a;
+  background: #0f172a;
+  color: #ffffff;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  text-decoration: none;
+  box-shadow: 0 8px 18px rgb(15 23 42 / 22%);
+  transition:
+    transform 120ms ease,
+    box-shadow 180ms ease,
+    opacity 120ms ease;
+}
+
+.report-link-cta:hover {
+  text-decoration: none;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 22px rgb(15 23 42 / 28%);
 }
 
 .result-head {
@@ -255,6 +310,12 @@ const scoreSummary = (() => {
 
 .result-list {
   margin-top: 6px;
+  display: grid;
+  gap: 8px;
+}
+
+.result-list li {
+  margin: 0;
 }
 
 .issue-list li {
@@ -265,13 +326,17 @@ const scoreSummary = (() => {
 .opportunity-list {
   list-style: none;
   padding-left: 0;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .opportunity-list li {
   border: 1px solid #e2e8f0;
   border-radius: 10px;
-  padding: 8px;
+  padding: 8px 10px;
   background: #fff;
+  margin: 0;
 }
 
 .opportunity-head {
@@ -284,38 +349,43 @@ const scoreSummary = (() => {
 .opportunity-detail {
   margin-top: 4px;
   color: #475569;
+  font-size: 0.88rem;
 }
 
-.status-dot {
-  border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 3px 8px;
-  border: 1px solid transparent;
+.current-value.failed {
+  color: #dc2626;
+  font-weight: 800;
+  text-shadow: 0 0 6px rgb(220 38 38 / 30%);
 }
 
-.status-dot.good {
-  background: #ecfdf3;
-  color: #166534;
-  border-color: #bbf7d0;
+.current-value.passed {
+  color: #16a34a;
+  font-weight: 800;
+  text-shadow: 0 0 8px rgb(22 163 74 / 35%);
 }
 
-.status-dot.poor,
-.status-dot.average {
-  background: #fef2f2;
-  color: #991b1b;
-  border-color: #fecaca;
+.pass-emoji {
+  filter: drop-shadow(0 0 4px rgb(22 163 74 / 45%));
 }
 
 @media (max-width: 768px) {
   .metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .opportunity-list {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 480px) {
   .metric-grid {
     grid-template-columns: 1fr;
+  }
+
+  .report-link-cta {
+    width: 100%;
+    justify-content: center;
   }
 }
 </style>
