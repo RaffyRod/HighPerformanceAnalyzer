@@ -4,6 +4,7 @@ export interface AnalyzeRequest {
   url: string
   bearerToken?: string
   language: LanguageCode
+  includeDiscoveredUrls?: boolean
 }
 
 export interface UrlInsights {

@@ -1,11 +1,11 @@
 import { load } from 'cheerio'
 import { launch } from 'chrome-launcher'
 import lighthouse from 'lighthouse'
-import { randomUUID } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import type {
   AnalyzeRequest,
   AnalyzeResponse,
@@ -36,8 +36,17 @@ interface LighthouseAudit {
 }
 
 const MAX_URLS = 5
-const REPORTS_DIR = path.resolve(process.cwd(), 'reports')
+const MAX_REPORT_FILES = 5
+const CURRENT_FILE_DIR = path.dirname(fileURLToPath(import.meta.url))
+const PROJECT_ROOT = path.resolve(CURRENT_FILE_DIR, '../../../../')
+const REPORTS_DIR = path.join(PROJECT_ROOT, 'reports')
 const HISTORY_DIR = path.join(REPORTS_DIR, 'history')
+const SETUP_DIR = path.join(REPORTS_DIR, '.setup')
+const K6_SETUP_FILE = path.join(SETUP_DIR, 'k6-bootstrap.json')
+const FALLBACK_REQUESTS = 25
+const FALLBACK_CONCURRENCY = 5
+
+let k6ReadyCache: boolean | null = null
 
 interface HistoricalRun {
   reportId: string
@@ -85,6 +94,140 @@ const writeHistory = async (baseUrl: string, run: HistoricalRun): Promise<void> 
 const subtractNullable = (current: number | null, previous: number | null): number | null => {
   if (typeof current !== 'number' || typeof previous !== 'number') return null
   return Number((current - previous).toFixed(2))
+}
+
+const getReportIdFromDate = (date: Date): string => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `analysis-${year}-${month}-${day}`
+}
+
+const cleanupOldReports = async (): Promise<void> => {
+  const entries = await fs.readdir(REPORTS_DIR, { withFileTypes: true })
+  const htmlFiles = entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.html'))
+    .map((entry) => entry.name)
+
+  if (htmlFiles.length <= MAX_REPORT_FILES) return
+
+  const filesWithStat = await Promise.all(
+    htmlFiles.map(async (fileName) => {
+      const fullPath = path.join(REPORTS_DIR, fileName)
+      const stat = await fs.stat(fullPath)
+      return { fileName, fullPath, modifiedAt: stat.mtimeMs }
+    }),
+  )
+
+  filesWithStat.sort((a, b) => b.modifiedAt - a.modifiedAt)
+  const filesToDelete = filesWithStat.slice(MAX_REPORT_FILES)
+  await Promise.all(filesToDelete.map((file) => fs.unlink(file.fullPath)))
+}
+
+const runCommand = (
+  command: string,
+  args: string[],
+): { status: number | null; stdout: string; stderr: string } => {
+  const result = spawnSync(command, args, {
+    shell: true,
+    encoding: 'utf-8',
+  })
+  return {
+    status: result.status,
+    stdout: result.stdout ?? '',
+    stderr: result.stderr ?? '',
+  }
+}
+
+const isCommandAvailable = (command: string): boolean => {
+  const probeCommand = process.platform === 'win32' ? 'where' : 'which'
+  const probe = runCommand(probeCommand, [command])
+  return probe.status === 0 && probe.stdout.trim().length > 0
+}
+
+const getK6InstallCommands = (): Array<{ command: string; args: string[]; label: string }> => {
+  if (process.platform === 'win32') {
+    return [
+      {
+        command: 'winget',
+        args: [
+          'install',
+          '--id',
+          'Grafana.k6',
+          '-e',
+          '--accept-package-agreements',
+          '--accept-source-agreements',
+        ],
+        label: 'winget',
+      },
+      { command: 'choco', args: ['install', 'k6', '-y'], label: 'choco' },
+      { command: 'scoop', args: ['install', 'k6'], label: 'scoop' },
+    ]
+  }
+
+  if (process.platform === 'darwin') {
+    return [{ command: 'brew', args: ['install', 'k6'], label: 'brew' }]
+  }
+
+  return []
+}
+
+const writeK6SetupLog = async (payload: {
+  status: 'installed' | 'failed'
+  method: string | null
+  details: string
+}): Promise<void> => {
+  await fs.mkdir(SETUP_DIR, { recursive: true })
+  await fs.writeFile(
+    K6_SETUP_FILE,
+    JSON.stringify(
+      {
+        ...payload,
+        updatedAt: new Date().toISOString(),
+      },
+      null,
+      2,
+    ),
+    'utf-8',
+  )
+}
+
+const ensureK6Ready = async (): Promise<boolean> => {
+  if (k6ReadyCache !== null) return k6ReadyCache
+
+  if (isCommandAvailable('k6')) {
+    k6ReadyCache = true
+    return true
+  }
+
+  const installers = getK6InstallCommands()
+  let lastDetails = 'No supported installer found for this OS.'
+
+  for (const installer of installers) {
+    if (!isCommandAvailable(installer.command)) continue
+
+    const result = runCommand(installer.command, installer.args)
+    lastDetails =
+      result.stderr.trim() || result.stdout.trim() || `Installer ${installer.label} failed.`
+
+    if (isCommandAvailable('k6')) {
+      await writeK6SetupLog({
+        status: 'installed',
+        method: installer.label,
+        details: result.stdout.trim() || 'k6 installed successfully.',
+      })
+      k6ReadyCache = true
+      return true
+    }
+  }
+
+  await writeK6SetupLog({
+    status: 'failed',
+    method: null,
+    details: lastDetails,
+  })
+  k6ReadyCache = false
+  return false
 }
 
 const discoverUrls = async (request: AnalyzeRequest): Promise<string[]> => {
@@ -229,7 +372,7 @@ const runLighthouse = async (
   }
 }
 
-const runK6 = async (url: string, bearerToken?: string): Promise<K6Summary> => {
+const runK6Binary = async (url: string, bearerToken?: string): Promise<K6Summary> => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'hpa-k6-'))
   const scriptPath = path.join(tempDir, 'script.js')
   const summaryPath = path.join(tempDir, 'summary.json')
@@ -275,6 +418,64 @@ export default function() {
 
   const summaryRaw = await fs.readFile(summaryPath, 'utf-8')
   return JSON.parse(summaryRaw) as K6Summary
+}
+
+const runFallbackLoadTest = async (url: string, bearerToken?: string): Promise<K6Summary> => {
+  const headers: HeadersInit = bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}
+  const durationsMs: number[] = []
+  let failedCount = 0
+  let nextIndex = 0
+
+  const runSingleRequest = async (): Promise<void> => {
+    const startedAt = Date.now()
+    const response = await fetch(url, { headers })
+    const elapsedMs = Date.now() - startedAt
+    durationsMs.push(elapsedMs)
+    if (!response.ok) {
+      failedCount += 1
+    }
+  }
+
+  const worker = async (): Promise<void> => {
+    while (nextIndex < FALLBACK_REQUESTS) {
+      nextIndex += 1
+      await runSingleRequest()
+    }
+  }
+
+  const workers = Array.from({ length: FALLBACK_CONCURRENCY }, () => worker())
+  await Promise.all(workers)
+
+  const sortedDurations = [...durationsMs].sort((a, b) => a - b)
+  const avg =
+    durationsMs.length > 0
+      ? durationsMs.reduce((sum, current) => sum + current, 0) / durationsMs.length
+      : 0
+  const p95Index = Math.max(0, Math.ceil(sortedDurations.length * 0.95) - 1)
+  const p95 = sortedDurations[p95Index] ?? 0
+
+  return {
+    metrics: {
+      http_req_duration: {
+        avg: Number(avg.toFixed(2)),
+        'p(95)': Number(p95.toFixed(2)),
+      },
+      http_req_failed: {
+        rate: Number((failedCount / FALLBACK_REQUESTS).toFixed(4)),
+      },
+    },
+  }
+}
+
+const runK6 = async (url: string, bearerToken?: string): Promise<K6Summary> => {
+  const k6Ready = await ensureK6Ready()
+
+  if (k6Ready) {
+    return runK6Binary(url, bearerToken)
+  }
+
+  console.warn('k6 is unavailable. Falling back to internal HTTP load probe.')
+  return runFallbackLoadTest(url, bearerToken)
 }
 
 const evaluateViolations = (
@@ -514,55 +715,53 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
     payload.language === 'es'
       ? {
           title: 'High Performance Analyzer - Lighthouse++',
-          subtitle: 'Reporte mejorado de performance con causa raíz y solución propuesta',
-          health: 'Estado general',
+          subtitle: 'Reporte ejecutivo de performance con foco en acciones',
           healthScore: 'Score promedio',
           pagesAnalyzed: 'Páginas analizadas',
-          criticalFindings: 'Hallazgos críticos',
+          findings: 'Hallazgos',
           noData: 'Sin datos',
-          causes: 'Causas raíz (priorizadas)',
+          causes: 'Causas raíz',
           possibleFix: 'Posible solución',
-          opportunities: 'Oportunidades de mejora detectadas por Lighthouse',
-          metrics: 'Métricas clave',
+          opportunities: 'Oportunidades',
+          metrics: 'Métricas',
           screenshot: 'Captura de referencia',
-          beforeAfter: 'Before/After',
           previousRun: 'Ejecución previa',
-          comparisonStatus: 'Estado comparativo',
+          comparisonStatus: 'Estado',
           improved: 'Mejoró',
           regressed: 'Empeoró',
           stable: 'Estable',
-          newlyDiscovered: 'Nueva URL detectada',
-          evidenceByIssue: 'Evidencia por hallazgo',
+          newlyDiscovered: 'Nueva URL',
           delta: 'Delta',
-          impactHigh: 'Alto',
-          impactMedium: 'Medio',
-          impactLow: 'Bajo',
+          priority: 'Prioridad',
+          topActions: 'Top acciones recomendadas',
+          pageBreakdown: 'Detalle por página',
+          details: 'Detalles',
+          analyzedAt: 'Analizado en',
         }
       : {
           title: 'High Performance Analyzer - Lighthouse++',
-          subtitle: 'Enhanced performance report with root cause and suggested fix',
-          health: 'Overall health',
+          subtitle: 'Executive performance report focused on actions',
           healthScore: 'Average score',
           pagesAnalyzed: 'Pages analyzed',
-          criticalFindings: 'Critical findings',
+          findings: 'Findings',
           noData: 'No data',
-          causes: 'Root causes (prioritized)',
+          causes: 'Root causes',
           possibleFix: 'Possible fix',
-          opportunities: 'Lighthouse opportunities',
-          metrics: 'Key metrics',
+          opportunities: 'Opportunities',
+          metrics: 'Metrics',
           screenshot: 'Reference screenshot',
-          beforeAfter: 'Before/After',
           previousRun: 'Previous run',
-          comparisonStatus: 'Comparison status',
+          comparisonStatus: 'Status',
           improved: 'Improved',
           regressed: 'Regressed',
           stable: 'Stable',
-          newlyDiscovered: 'Newly discovered URL',
-          evidenceByIssue: 'Evidence by finding',
+          newlyDiscovered: 'New URL',
           delta: 'Delta',
-          impactHigh: 'High',
-          impactMedium: 'Medium',
-          impactLow: 'Low',
+          priority: 'Priority',
+          topActions: 'Top recommended actions',
+          pageBreakdown: 'Per-page breakdown',
+          details: 'Details',
+          analyzedAt: 'Analyzed at',
         }
 
   const averageScore = payload.results.length
@@ -573,95 +772,89 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
         ).toFixed(2),
       )
     : 0
-  const criticalFindings = payload.results.reduce((sum, item) => sum + item.rootCauses.length, 0)
+  const findings = payload.results.reduce((sum, item) => sum + item.issues.length, 0)
+
+  const topActions = payload.results
+    .flatMap((item) => item.suggestions)
+    .filter((value, index, source) => source.indexOf(value) === index)
+    .slice(0, 3)
 
   const rows = payload.results
-    .map(
-      (result) => `
+    .map((result) => {
+      const comparisonStatus =
+        result.comparison?.status === 'improved'
+          ? labels.improved
+          : result.comparison?.status === 'regressed'
+            ? labels.regressed
+            : result.comparison?.status === 'stable'
+              ? labels.stable
+              : labels.newlyDiscovered
+
+      return `
       <section class="card">
-        <h2>${result.pageUrl}</h2>
-        <div class="row-meta">
-          <span>${labels.comparisonStatus}:</span>
-          <span class="status ${result.comparison?.status ?? 'new'}">${
-            result.comparison?.status === 'improved'
-              ? labels.improved
-              : result.comparison?.status === 'regressed'
-                ? labels.regressed
-                : result.comparison?.status === 'stable'
-                  ? labels.stable
-                  : labels.newlyDiscovered
-          }</span>
+        <div class="card-head">
+          <h2>${result.pageUrl}</h2>
+          <span class="status ${result.comparison?.status ?? 'new'}">${comparisonStatus}</span>
         </div>
         <div class="kpis">
           <div class="kpi"><span>Score</span><b>${result.performanceScore}</b></div>
           <div class="kpi"><span>FCP</span><b>${result.firstContentfulPaintMs ?? 'N/A'} ms</b></div>
           <div class="kpi"><span>LCP</span><b>${result.largestContentfulPaintMs ?? 'N/A'} ms</b></div>
           <div class="kpi"><span>TTI</span><b>${result.timeToInteractiveMs ?? 'N/A'} ms</b></div>
-          <div class="kpi"><span>Payload</span><b>${result.totalByteWeightKb} KB</b></div>
-          <div class="kpi"><span>Req p95</span><b>${result.callTimeP95Ms ?? 'N/A'} ms</b></div>
         </div>
-        <h3>${labels.beforeAfter}</h3>
-        <ul>
-          <li>${labels.previousRun}: <b>${result.comparison?.previousAnalyzedAt ?? labels.noData}</b></li>
-          <li>Score ${labels.delta}: <b>${result.comparison?.deltas.performanceScore ?? labels.noData}</b></li>
-          <li>FCP ${labels.delta}: <b>${result.comparison?.deltas.firstContentfulPaintMs ?? labels.noData} ms</b></li>
-          <li>LCP ${labels.delta}: <b>${result.comparison?.deltas.largestContentfulPaintMs ?? labels.noData} ms</b></li>
-          <li>TTI ${labels.delta}: <b>${result.comparison?.deltas.timeToInteractiveMs ?? labels.noData} ms</b></li>
-          <li>Payload ${labels.delta}: <b>${result.comparison?.deltas.totalByteWeightKb ?? labels.noData} KB</b></li>
-          <li>Req p95 ${labels.delta}: <b>${result.comparison?.deltas.callTimeP95Ms ?? labels.noData} ms</b></li>
-        </ul>
-        <h3>${labels.metrics}</h3>
-        <ul>
-          <li>Images: <b>${result.imageBytesKb} KB</b></li>
-          <li>Video/Media: <b>${result.videoBytesKb} KB</b></li>
-          <li>Calls avg: <b>${result.callTimeAvgMs ?? 'N/A'} ms</b></li>
-          <li>Failure rate: <b>${result.callsFailedRate ?? 'N/A'}%</b></li>
-        </ul>
-        <h3>${labels.causes}</h3>
-        <ul>
+        <div class="quick-list">
+          <p><b>${labels.comparisonStatus}:</b> ${comparisonStatus}</p>
+          <p><b>${labels.previousRun}:</b> ${result.comparison?.previousAnalyzedAt ?? labels.noData}</p>
+          <p><b>Score ${labels.delta}:</b> ${result.comparison?.deltas.performanceScore ?? labels.noData}</p>
+          <p><b>LCP ${labels.delta}:</b> ${result.comparison?.deltas.largestContentfulPaintMs ?? labels.noData} ms</p>
+          <p><b>Req p95 ${labels.delta}:</b> ${result.comparison?.deltas.callTimeP95Ms ?? labels.noData} ms</p>
+        </div>
+        <details>
+          <summary>${labels.details}</summary>
+          <h3>${labels.metrics}</h3>
+          <ul>
+            <li>Payload: <b>${result.totalByteWeightKb} KB</b></li>
+            <li>Images: <b>${result.imageBytesKb} KB</b></li>
+            <li>Video/Media: <b>${result.videoBytesKb} KB</b></li>
+            <li>Calls avg: <b>${result.callTimeAvgMs ?? 'N/A'} ms</b></li>
+            <li>Calls p95: <b>${result.callTimeP95Ms ?? 'N/A'} ms</b></li>
+            <li>Failure rate: <b>${result.callsFailedRate ?? 'N/A'}%</b></li>
+          </ul>
+          <h3>${labels.causes}</h3>
+          <ul>
+            ${
+              result.rootCauses.length
+                ? result.rootCauses
+                    .map(
+                      (item) =>
+                        `<li><b>${item.cause}</b> (${labels.priority}: ${item.impact})<br />${item.evidence}<br /><b>${labels.possibleFix}:</b> ${item.possibleFix}</li>`,
+                    )
+                    .join('')
+                : `<li>${labels.noData}</li>`
+            }
+          </ul>
+          <h3>${labels.opportunities}</h3>
+          <ul>
+            ${
+              result.opportunities.length
+                ? result.opportunities
+                    .map(
+                      (item) =>
+                        `<li><b>${item.title}</b> (${item.score ?? 'N/A'}) - ${item.detail}</li>`,
+                    )
+                    .join('')
+                : `<li>${labels.noData}</li>`
+            }
+          </ul>
           ${
-            result.rootCauses.length
-              ? result.rootCauses
-                  .map(
-                    (item) => `<li>
-                <div><b>${item.cause}</b> <span class="impact ${item.impact}">${
-                  item.impact === 'high'
-                    ? labels.impactHigh
-                    : item.impact === 'medium'
-                      ? labels.impactMedium
-                      : labels.impactLow
-                }</span></div>
-                <div class="evidence">${item.evidence}</div>
-                <div class="fix"><b>${labels.possibleFix}:</b> ${item.possibleFix}</div>
-              </li>`,
-                  )
-                  .join('')
-              : `<li>${labels.noData}</li>`
+            result.finalScreenshotDataUrl
+              ? `<h3>${labels.screenshot}</h3><img class="shot" src="${result.finalScreenshotDataUrl}" alt="Lighthouse screenshot for ${result.pageUrl}" />`
+              : ''
           }
-        </ul>
-        <h3>${labels.evidenceByIssue}</h3>
-        <ul>${result.rootCauses.map((item) => `<li>${item.cause} -> ${item.evidence}</li>`).join('') || `<li>${labels.noData}</li>`}</ul>
-        <h3>${labels.opportunities}</h3>
-        <ul>
-          ${
-            result.opportunities.length
-              ? result.opportunities
-                  .map(
-                    (item) =>
-                      `<li><b>${item.title}</b> (${item.score ?? 'N/A'}) - ${item.detail}</li>`,
-                  )
-                  .join('')
-              : `<li>${labels.noData}</li>`
-          }
-        </ul>
-        ${
-          result.finalScreenshotDataUrl
-            ? `<h3>${labels.screenshot}</h3><img class="shot" src="${result.finalScreenshotDataUrl}" alt="Lighthouse screenshot for ${result.pageUrl}" />`
-            : ''
-        }
+        </details>
       </section>
-    `,
-    )
+    `
+    })
     .join('')
 
   return `
@@ -672,41 +865,45 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Performance Report</title>
     <style>
-      body { font-family: Arial, sans-serif; margin: 24px; background: #0f172a; color: #e2e8f0; }
+      body { font-family: Inter, Arial, sans-serif; margin: 24px; background: #0f172a; color: #e2e8f0; line-height: 1.45; }
       h1 { margin-bottom: 4px; }
-      .meta { color: #94a3b8; margin-bottom: 24px; }
-      .hero { background: #111c35; border: 1px solid #1f2f53; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+      h2 { margin: 0; font-size: 18px; word-break: break-word; }
+      h3 { margin-bottom: 8px; margin-top: 16px; font-size: 14px; color: #dbe7ff; }
+      .meta { color: #9eb2d7; margin-bottom: 14px; }
+      .hero { background: #111c35; border: 1px solid #1f2f53; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
       .hero-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-      .hero-item { background: #0e172d; border: 1px solid #22345f; border-radius: 8px; padding: 10px; }
-      .hero-item span { color: #8aa0cc; display: block; font-size: 12px; }
-      .hero-item b { font-size: 18px; }
-      .card { background: #1e293b; border-radius: 8px; padding: 16px; margin-bottom: 16px; border: 1px solid #2a3a56; }
-      .row-meta { display: flex; gap: 8px; align-items: center; color: #b8c8e6; margin-bottom: 8px; font-size: 13px; }
+      .hero-item { background: #0f1830; border: 1px solid #253c68; border-radius: 10px; padding: 10px; }
+      .hero-item span { color: #9bb6e8; display: block; font-size: 12px; }
+      .hero-item b { font-size: 20px; }
+      .actions { margin-top: 12px; background: #0f1830; border: 1px solid #253c68; border-radius: 10px; padding: 10px 12px; }
+      .actions h3 { margin-top: 0; }
+      .actions ol { margin: 6px 0 0 20px; padding: 0; }
+      .card { background: #19253c; border-radius: 12px; padding: 14px; margin-bottom: 12px; border: 1px solid #2d446f; }
+      .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
       .status { display: inline-block; padding: 3px 8px; border-radius: 999px; font-weight: 600; }
       .status.improved { background: #163126; color: #a6ebc8; border: 1px solid #2d6a4f; }
       .status.regressed { background: #3a1520; color: #ffb6c4; border: 1px solid #6d2638; }
       .status.stable { background: #1b2941; color: #bfd3fb; border: 1px solid #365890; }
       .status.new { background: #312311; color: #ffe3ae; border: 1px solid #705324; }
-      .kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
-      .kpi { background: #0f172a; border: 1px solid #243550; border-radius: 8px; padding: 10px; }
+      .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
+      .kpi { background: #0f172a; border: 1px solid #2d446f; border-radius: 8px; padding: 8px; }
       .kpi span { display: block; color: #9bb0d8; font-size: 12px; }
-      .kpi b { font-size: 17px; }
-      ul { padding-left: 20px; }
+      .kpi b { font-size: 16px; }
+      .quick-list { color: #bdd0f5; display: grid; gap: 6px; margin-bottom: 6px; }
+      .quick-list p { margin: 0; }
+      details { margin-top: 8px; }
+      summary { cursor: pointer; color: #7fc8ff; font-weight: 600; }
+      ul { padding-left: 18px; }
       li { margin-bottom: 8px; }
-      .evidence { color: #9db0d4; font-size: 13px; }
-      .fix { color: #d4def3; font-size: 13px; }
-      .impact { display: inline-block; font-size: 11px; margin-left: 6px; border-radius: 999px; padding: 2px 7px; border: 1px solid transparent; }
-      .impact.high { background: #3a1520; color: #ffb6c4; border-color: #6d2638; }
-      .impact.medium { background: #3a2f13; color: #ffe1a5; border-color: #6a5523; }
-      .impact.low { background: #163126; color: #a6ebc8; border-color: #2d6a4f; }
-      .shot { width: 100%; max-width: 900px; border-radius: 8px; border: 1px solid #2a3a56; }
+      .shot { width: 100%; max-width: 860px; border-radius: 8px; border: 1px solid #2d446f; }
+      @media (max-width: 960px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .hero-grid { grid-template-columns: 1fr; } }
     </style>
   </head>
   <body>
     <h1>${labels.title}</h1>
     <p class="meta">${labels.subtitle}</p>
     <div class="hero">
-      <p class="meta">Base URL: ${payload.baseUrl} | Analyzed at: ${payload.analyzedAt}</p>
+      <p class="meta">Base URL: ${payload.baseUrl} | ${labels.analyzedAt}: ${payload.analyzedAt}</p>
       <div class="hero-grid">
         <div class="hero-item">
           <span>${labels.healthScore}</span>
@@ -717,11 +914,20 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
           <b>${payload.results.length}</b>
         </div>
         <div class="hero-item">
-          <span>${labels.criticalFindings}</span>
-          <b>${criticalFindings}</b>
+          <span>${labels.findings}</span>
+          <b>${findings}</b>
         </div>
       </div>
+      <div class="actions">
+        <h3>${labels.topActions}</h3>
+        ${
+          topActions.length
+            ? `<ol>${topActions.map((item) => `<li>${item}</li>`).join('')}</ol>`
+            : `<p>${labels.noData}</p>`
+        }
+      </div>
     </div>
+    <p class="meta"><b>${labels.pageBreakdown}</b></p>
     ${rows}
   </body>
 </html>
@@ -729,8 +935,12 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
 }
 
 export const analyzeWebsite = async (request: AnalyzeRequest): Promise<AnalyzeResponse> => {
-  const discoveredUrls = await discoverUrls(request)
-  const reportId = randomUUID()
+  const discoveredUrls =
+    request.includeDiscoveredUrls === false
+      ? [normalizeUrl(request.url)]
+      : await discoverUrls(request)
+  const analyzedAt = new Date().toISOString()
+  const reportId = getReportIdFromDate(new Date(analyzedAt))
   const results: UrlInsights[] = []
   const history = await readHistory(request.url)
   const previousRun: HistoricalRun | null = history.length
@@ -777,7 +987,7 @@ export const analyzeWebsite = async (request: AnalyzeRequest): Promise<AnalyzeRe
     language: request.language,
     baseUrl: request.url,
     discoveredUrls,
-    analyzedAt: new Date().toISOString(),
+    analyzedAt,
     results: comparedResults,
     htmlReportPath,
     previousReportId: previousRun?.reportId ?? null,
@@ -785,6 +995,7 @@ export const analyzeWebsite = async (request: AnalyzeRequest): Promise<AnalyzeRe
 
   const html = buildHtmlReport(payload)
   await fs.writeFile(path.join(REPORTS_DIR, htmlFileName), html, 'utf-8')
+  await cleanupOldReports()
   await writeHistory(request.url, {
     reportId,
     analyzedAt: payload.analyzedAt,

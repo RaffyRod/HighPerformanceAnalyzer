@@ -21,6 +21,7 @@ app.post<{ Body: AnalyzeRequest }>('/api/analyze', async (request, reply) => {
     url: body.url,
     bearerToken: body.bearerToken?.trim() || undefined,
     language,
+    includeDiscoveredUrls: body.includeDiscoveredUrls !== false,
   }
 
   try {
@@ -28,9 +29,9 @@ app.post<{ Body: AnalyzeRequest }>('/api/analyze', async (request, reply) => {
     return report
   } catch (error) {
     request.log.error(error)
+    const details = error instanceof Error ? error.message : 'Unknown error'
     return reply.code(500).send({
-      message:
-        'Analysis failed. Ensure URL is reachable, Chrome is installed, and k6 is available in PATH.',
+      message: `Analysis failed: ${details}`,
     })
   }
 })

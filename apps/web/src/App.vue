@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { AnalyzeApiResponse } from './types/api'
 
@@ -8,18 +8,55 @@ const { t, locale } = useI18n()
 const form = reactive({
   url: '',
   bearerToken: '',
-  language: 'es',
+  language: 'es' as 'es' | 'en',
+  includeDiscoveredUrls: true,
 })
 
 const loading = ref(false)
 const errorMessage = ref('')
 const report = ref<AnalyzeApiResponse | null>(null)
+const progress = ref(0)
+const phaseIndex = ref(0)
+const progressInterval = ref<number | null>(null)
+
+const phases = ['phaseDiscovery', 'phaseLighthouse', 'phaseLoad', 'phaseReport'] as const
+const currentPhase = computed<string>(
+  () => phases[Math.min(phaseIndex.value, phases.length - 1)] ?? 'phaseDiscovery',
+)
+
+const stopProgress = (): void => {
+  if (progressInterval.value !== null) {
+    window.clearInterval(progressInterval.value)
+    progressInterval.value = null
+  }
+}
+
+const startProgress = (): void => {
+  progress.value = 8
+  phaseIndex.value = 0
+  stopProgress()
+
+  progressInterval.value = window.setInterval(() => {
+    if (progress.value >= 92) return
+
+    progress.value += 2
+    if (progress.value > 28) phaseIndex.value = 1
+    if (progress.value > 58) phaseIndex.value = 2
+    if (progress.value > 82) phaseIndex.value = 3
+  }, 500)
+}
+
+const setLanguage = (language: 'es' | 'en'): void => {
+  form.language = language
+  locale.value = language
+}
 
 const runAnalysis = async (): Promise<void> => {
   loading.value = true
   errorMessage.value = ''
   report.value = null
   locale.value = form.language
+  startProgress()
 
   try {
     const response = await fetch('/api/analyze', {
@@ -29,17 +66,23 @@ const runAnalysis = async (): Promise<void> => {
         url: form.url,
         bearerToken: form.bearerToken || undefined,
         language: form.language,
+        includeDiscoveredUrls: form.includeDiscoveredUrls,
       }),
     })
 
     if (!response.ok) {
-      throw new Error('Analysis request failed')
+      const failurePayload = (await response.json().catch(() => null)) as {
+        message?: string
+      } | null
+      throw new Error(failurePayload?.message || t('error'))
     }
 
     report.value = (await response.json()) as AnalyzeApiResponse
-  } catch {
-    errorMessage.value = t('error')
+    progress.value = 100
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : t('error')
   } finally {
+    stopProgress()
     loading.value = false
   }
 }
@@ -47,32 +90,71 @@ const runAnalysis = async (): Promise<void> => {
 
 <template>
   <main class="container">
-    <h1>{{ t('title') }}</h1>
-    <p class="subtitle">{{ t('subtitle') }}</p>
+    <section class="hero">
+      <h1>{{ t('title') }}</h1>
+      <p class="subtitle">{{ t('subtitle') }}</p>
+    </section>
 
-    <form class="form" @submit.prevent="runAnalysis">
-      <label>
-        {{ t('targetUrl') }}
-        <input v-model="form.url" type="url" required placeholder="https://example.com" />
-      </label>
+    <section class="panel">
+      <form class="form" @submit.prevent="runAnalysis">
+        <div class="toolbar">
+          <span class="toolbar-label">{{ t('language') }}</span>
+          <div class="language-toggle" role="group" :aria-label="t('language')">
+            <button
+              type="button"
+              class="toggle-btn"
+              :class="{ active: form.language === 'es' }"
+              :disabled="loading"
+              @click="setLanguage('es')"
+            >
+              ES
+            </button>
+            <button
+              type="button"
+              class="toggle-btn"
+              :class="{ active: form.language === 'en' }"
+              :disabled="loading"
+              @click="setLanguage('en')"
+            >
+              EN
+            </button>
+          </div>
+        </div>
 
-      <label>
-        {{ t('bearerToken') }}
-        <input v-model="form.bearerToken" type="password" placeholder="eyJ..." />
-      </label>
+        <label>
+          {{ t('targetUrl') }}
+          <input v-model="form.url" type="url" required placeholder="https://example.com" />
+        </label>
 
-      <label>
-        {{ t('language') }}
-        <select v-model="form.language">
-          <option value="es">Español</option>
-          <option value="en">English</option>
-        </select>
-      </label>
+        <label>
+          {{ t('bearerToken') }}
+          <input v-model="form.bearerToken" type="password" placeholder="eyJ..." />
+        </label>
 
-      <button type="submit" :disabled="loading">
-        {{ loading ? t('running') : t('runAnalysis') }}
-      </button>
-    </form>
+        <label class="checkbox-row">
+          <input v-model="form.includeDiscoveredUrls" type="checkbox" />
+          <span>{{ t('includeDiscoveredUrls') }}</span>
+        </label>
+
+        <button type="submit" class="primary-btn" :disabled="loading">
+          {{ loading ? t('running') : t('runAnalysis') }}
+        </button>
+      </form>
+    </section>
+
+    <section v-if="loading" class="panel progress-panel">
+      <div class="progress-header">
+        <strong>{{ t('running') }}</strong>
+        <span>{{ progress }}%</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" :style="{ width: `${progress}%` }"></div>
+      </div>
+      <p class="phase">
+        <span>{{ t('analyzingPhase') }}:</span>
+        <b>{{ t(currentPhase) }}</b>
+      </p>
+    </section>
 
     <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
 
@@ -81,7 +163,9 @@ const runAnalysis = async (): Promise<void> => {
       <p>
         <strong>{{ t('discoveredUrls') }}:</strong> {{ report.discoveredUrls.length }}
       </p>
-      <a :href="report.htmlReportPath" target="_blank" rel="noreferrer">{{ t('openHtml') }}</a>
+      <a class="report-link" :href="report.htmlReportPath" target="_blank" rel="noreferrer">
+        {{ t('openHtml') }}
+      </a>
 
       <article v-for="result in report.results" :key="result.pageUrl" class="result">
         <h3>{{ result.pageUrl }}</h3>
