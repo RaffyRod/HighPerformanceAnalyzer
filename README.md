@@ -1,161 +1,140 @@
-# High Performance Analyzer
+# High Performance Analyzer 🚀
 
-High Performance Analyzer is a full-stack monorepo that discovers key URLs from a target website, runs performance analysis, and generates an HTML report with findings, root causes, and suggestions.
+Analyze any website with Lighthouse + load checks, discover internal URLs, and generate a friendly HTML report with actionable fixes.
 
-It combines:
+## ✨ Features
 
-- Lighthouse audits (browser performance diagnostics)
-- HTTP load checks (k6 when available, internal fallback when not)
-- Multilingual UI/reporting (English and Spanish)
-- Historical comparison between runs
+- 🌐 Analyze one URL or discovered internal URLs (same domain)
+- ⚡ Lighthouse metrics (Performance score, FCP, LCP, TTI)
+- 📡 Request latency + failure insights (k6 or internal fallback)
+- 🌍 Bilingual UI/report (`en` / `es`)
+- 📊 Friendly HTML report (score overview, priorities, causes, actions)
+- 🕒 Before/after comparison against previous runs
+- 🗂️ Report retention:
+  - Stored in `reports/`
+  - Naming: `analysis-YYYY-MM-DD.html`
+  - Same-day runs overwrite that day file
+  - Keep only latest 5 HTML reports
 
-## What You Get
+## ⚡ Quick Setup (Recommended)
 
-- URL discovery from the provided base URL (same origin, top pages)
-- Performance insights per page:
-  - Performance score
-  - FCP, LCP, TTI
-  - Payload size (including image/media weight)
-  - Request latency and failure rate
-- Enhanced HTML report with:
-  - Root causes and suggested fixes
-  - Opportunities from Lighthouse
-  - Final page screenshot evidence
-  - Before/after deltas versus the previous run
-- Report retention policy:
-  - Reports are stored in `reports/`
-  - File naming uses execution date: `analysis-YYYY-MM-DD.html`
-  - Same-day runs replace the same file
-  - Only the latest 5 HTML reports are retained
-
-## Monorepo Structure
-
-```text
-apps/
-  api/        # Fastify + TypeScript backend
-  web/        # Vue 3 + TypeScript frontend
-packages/
-  shared/     # Shared TypeScript contracts
-scripts/
-  dev-auto-port.mjs  # Auto-detects free ports for API and Web
-reports/      # Generated HTML reports + history
-```
-
-## Prerequisites
-
-- Node.js 20+ (recommended)
-- pnpm 10+
-- Chrome installed (required by Lighthouse)
-
-Optional (recommended):
-
-- `k6` installed globally for native load testing
-
-> No worries if `k6` is missing on first run. The backend now attempts one-time auto-setup and falls back to an internal probe if installation is unavailable.
-
-## Quick Start
-
-1. Install dependencies:
+### 1) Install dependencies
 
 ```bash
 pnpm install
 ```
 
-2. Start the app (API + Web with auto free-port detection):
+### 2) Start the full app (API + Web)
 
 ```bash
 pnpm dev
 ```
 
-3. Open the frontend URL printed in terminal, submit:
-   - Target URL
-   - Optional Bearer token
-   - Language (ES/EN toggle)
+### 3) Open the app URL shown in terminal
 
-## k6 First-Run Auto Setup
+- Fill target URL
+- Add Bearer token if needed
+- Select language
+- Run analysis ✅
 
-When analysis needs load metrics, backend checks if `k6` exists:
+## 🔗 Important Routes
 
-1. If `k6` is available in `PATH`, it is used directly.
-2. If missing, backend tries to install it automatically (platform-dependent):
-   - Windows: `winget`, then `choco`, then `scoop`
-   - macOS: `brew`
-3. If installation still fails, analysis continues using the internal HTTP fallback probe (so analysis does not fail).
+- Web app: printed by `pnpm dev` (auto-port)
+- API health: `GET /api/health`
+- Analyze: `POST /api/analyze`
+- Report by id: `GET /api/report/:id`
 
-Bootstrap state is recorded in:
-
-- `reports/.setup/k6-bootstrap.json`
-
-## API Endpoints
-
-- `GET /api/health` - Health check
-- `POST /api/analyze` - Starts a full analysis run
-- `GET /api/report/:id` - Returns generated HTML report
-
-Example request:
+Example payload:
 
 ```json
 {
   "url": "https://example.com",
   "bearerToken": "your-token-if-needed",
-  "language": "en"
+  "language": "en",
+  "includeDiscoveredUrls": true
 }
 ```
 
-## Development Commands
+## 🧱 Project Structure
 
-- `pnpm dev` - Run web + api in dev mode with automatic ports
+```text
+apps/
+  api/        # Fastify + TypeScript API
+  web/        # Vue 3 + TypeScript frontend
+packages/
+  shared/     # Shared contracts/types
+scripts/
+  dev-auto-port.mjs  # Finds free ports automatically
+reports/      # Generated reports + history + setup logs
+```
+
+## 🔧 Environment & Dynamic Paths
+
+The app is portable across machines and supports dynamic config:
+
+- `API_HOST`, `API_PORT`, `WEB_PORT`
+- `VITE_API_TARGET`
+- `DEV_HOST`
+- `HPA_REPORTS_DIR` (custom reports directory)
+
+If not provided, safe defaults are used.
+
+## 🧪 k6 First-Run Behavior
+
+When running analysis:
+
+1. Uses `k6` if available in `PATH`
+2. If missing, tries one-time install:
+   - Windows: `winget` → `choco` → `scoop`
+   - macOS: `brew`
+3. If still unavailable, continues with internal HTTP fallback (analysis does not break)
+
+Setup diagnostics:
+
+- `reports/.setup/k6-bootstrap.json`
+
+## 🛠️ Dev Commands
+
+- `pnpm dev` - Run API + Web with auto free ports
 - `pnpm build` - Build all workspaces
 - `pnpm lint` - Lint all workspaces
-- `pnpm format` - Format repository files
+- `pnpm format` - Format repository
 
-Workspace-specific examples:
+Workspace examples:
 
 - `pnpm --filter @hpa/api dev`
 - `pnpm --filter @hpa/web dev`
 - `pnpm --filter @hpa/api build`
 - `pnpm --filter @hpa/web build`
 
-## Troubleshooting
+## 🆘 Troubleshooting
 
-### "Analysis failed..." in the UI
+### "Analysis failed..." in UI
 
-Common causes:
+Check:
 
-- Target URL is not reachable
-- Auth token is invalid/expired
-- Chrome is not installed or blocked
-- `k6` unavailable and installer cannot run in current environment
-
-What to check:
-
-1. Verify URL manually in browser
-2. Re-run with a valid Bearer token if endpoint is protected
-3. Confirm Chrome is installed
-4. Confirm package managers are available:
-   - Windows: `winget --version`, `choco --version`, or `scoop --version`
-   - macOS: `brew --version`
-5. Read `reports/.setup/k6-bootstrap.json` for auto-setup diagnostics
+- URL is reachable
+- Bearer token is valid (if required)
+- Chrome is installed
+- k6 installer tools are available (`winget`, `choco`, `scoop`, or `brew`)
+- `reports/.setup/k6-bootstrap.json` for setup details
 
 ### Ports already in use
 
-Use:
+Just run:
 
 ```bash
 pnpm dev
 ```
 
-The provided launcher automatically finds free ports for both API and Web.
+It auto-finds available ports.
 
-## Quality and Tooling
+## ✅ Tooling
 
-- TypeScript across frontend/backend/shared package
+- TypeScript (frontend + backend + shared)
 - ESLint + Prettier
 - Husky + lint-staged pre-commit checks
-- Multilingual UI and report labels (`en` / `es`)
 
-## Notes
+---
 
-- Reports are intentionally retained as latest 5 HTML files only.
-- Same-day report names are deterministic by date and overwrite previous file for that day.
-- Historical comparison data is persisted in `reports/history/`.
+Built to make performance diagnostics easier to understand and faster to act on. 💙

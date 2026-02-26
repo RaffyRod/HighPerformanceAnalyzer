@@ -519,9 +519,19 @@ const evaluateViolations = (
   const avg = k6Summary.metrics?.http_req_duration?.avg
   const p95 = k6Summary.metrics?.http_req_duration?.['p(95)']
   const failRate = k6Summary.metrics?.http_req_failed?.rate
+  const performanceThreshold = 0.8
+  const fcpThresholdMs = 1800
+  const lcpThresholdMs = 2500
+  const pageWeightThresholdKb = 2048
+  const avgCallThresholdMs = 800
+  const failureRateThresholdPercent = 1
 
-  if (lighthouseResult.performanceScore < 0.8) {
-    issues.push(t(lang, 'lowPerformance'))
+  if (lighthouseResult.performanceScore < performanceThreshold) {
+    issues.push(
+      lang === 'es'
+        ? `Performance score bajo: actual ${lighthouseResult.performanceScore}, esperado >= ${performanceThreshold}.`
+        : `Low performance score: current ${lighthouseResult.performanceScore}, expected >= ${performanceThreshold}.`,
+    )
     suggestions.add(t(lang, 'reduceJs'))
     rootCauses.push({
       cause:
@@ -539,8 +549,12 @@ const evaluateViolations = (
           : 'Load only essentials first and defer non-critical scripts.',
     })
   }
-  if ((lighthouseResult.firstContentfulPaintMs ?? 0) > 1800) {
-    issues.push(t(lang, 'slowFcp'))
+  if ((lighthouseResult.firstContentfulPaintMs ?? 0) > fcpThresholdMs) {
+    issues.push(
+      lang === 'es'
+        ? `FCP lento: actual ${lighthouseResult.firstContentfulPaintMs ?? 'N/A'} ms, esperado <= ${fcpThresholdMs} ms.`
+        : `Slow FCP: current ${lighthouseResult.firstContentfulPaintMs ?? 'N/A'} ms, expected <= ${fcpThresholdMs} ms.`,
+    )
     suggestions.add(t(lang, 'cacheAssets'))
     rootCauses.push({
       cause:
@@ -558,8 +572,12 @@ const evaluateViolations = (
           : 'Reduce render-blocking resources and prioritize critical CSS.',
     })
   }
-  if ((lighthouseResult.largestContentfulPaintMs ?? 0) > 2500) {
-    issues.push(t(lang, 'slowLcp'))
+  if ((lighthouseResult.largestContentfulPaintMs ?? 0) > lcpThresholdMs) {
+    issues.push(
+      lang === 'es'
+        ? `LCP lento: actual ${lighthouseResult.largestContentfulPaintMs ?? 'N/A'} ms, esperado <= ${lcpThresholdMs} ms.`
+        : `Slow LCP: current ${lighthouseResult.largestContentfulPaintMs ?? 'N/A'} ms, expected <= ${lcpThresholdMs} ms.`,
+    )
     suggestions.add(t(lang, 'improveImages'))
     rootCauses.push({
       cause:
@@ -577,8 +595,12 @@ const evaluateViolations = (
           : 'Optimize the main hero content and delay secondary resources.',
     })
   }
-  if (lighthouseResult.totalByteWeightKb > 2048) {
-    issues.push(t(lang, 'heavyPage'))
+  if (lighthouseResult.totalByteWeightKb > pageWeightThresholdKb) {
+    issues.push(
+      lang === 'es'
+        ? `Página pesada: actual ${lighthouseResult.totalByteWeightKb} KB, esperado <= ${pageWeightThresholdKb} KB.`
+        : `Heavy page payload: current ${lighthouseResult.totalByteWeightKb} KB, expected <= ${pageWeightThresholdKb} KB.`,
+    )
     suggestions.add(t(lang, 'improveImages'))
     rootCauses.push({
       cause: lang === 'es' ? 'La página pesa demasiado' : 'The page payload is too heavy',
@@ -593,8 +615,12 @@ const evaluateViolations = (
           : 'Compress images and remove files that do not add value.',
     })
   }
-  if (typeof avg === 'number' && avg > 800) {
-    issues.push(t(lang, 'slowCalls'))
+  if (typeof avg === 'number' && avg > avgCallThresholdMs) {
+    issues.push(
+      lang === 'es'
+        ? `Llamadas API lentas: promedio actual ${avg.toFixed(2)} ms, esperado <= ${avgCallThresholdMs} ms.`
+        : `Slow API calls: current average ${avg.toFixed(2)} ms, expected <= ${avgCallThresholdMs} ms.`,
+    )
     suggestions.add(t(lang, 'optimizeBackend'))
     rootCauses.push({
       cause: lang === 'es' ? 'El servidor responde lento' : 'The server responds too slowly',
@@ -610,7 +636,11 @@ const evaluateViolations = (
     })
   }
   if (typeof failRate === 'number' && failRate > 0.01) {
-    issues.push(t(lang, 'highFailureRate'))
+    issues.push(
+      lang === 'es'
+        ? `Tasa de error alta: actual ${(failRate * 100).toFixed(2)}%, esperado <= ${failureRateThresholdPercent}%.`
+        : `High error rate: current ${(failRate * 100).toFixed(2)}%, expected <= ${failureRateThresholdPercent}%.`,
+    )
     suggestions.add(t(lang, 'optimizeBackend'))
     rootCauses.push({
       cause:
@@ -742,68 +772,299 @@ const withComparison = (
 }
 
 const buildHtmlReport = (payload: AnalyzeResponse): string => {
-  const labels =
-    payload.language === 'es'
-      ? {
-          title: 'High Performance Analyzer - Lighthouse++',
-          subtitle: 'Reporte ejecutivo de performance con foco en acciones',
-          healthScore: 'Score promedio',
-          pagesAnalyzed: 'Páginas analizadas',
-          findings: 'Hallazgos',
-          noData: 'Sin datos',
-          causes: 'Causas raíz',
-          possibleFix: 'Posible solución',
-          opportunities: 'Oportunidades',
-          metrics: 'Métricas',
-          screenshot: 'Captura de referencia',
-          previousRun: 'Ejecución previa',
-          comparisonStatus: 'Estado',
-          improved: 'Mejoró',
-          regressed: 'Empeoró',
-          stable: 'Estable',
-          newlyDiscovered: 'Nueva URL',
-          delta: 'Delta',
-          priority: 'Prioridad',
-          topActions: 'Top acciones recomendadas',
-          pageBreakdown: 'Detalle por página',
-          details: 'Detalles',
-          analyzedAt: 'Analizado en',
-          whyItMatters: 'Por que importa',
-          whatToDo: 'Que hacer',
-          impactHigh: 'Alta',
-          impactMedium: 'Media',
-          impactLow: 'Baja',
-        }
-      : {
-          title: 'High Performance Analyzer - Lighthouse++',
-          subtitle: 'Executive performance report focused on actions',
-          healthScore: 'Average score',
-          pagesAnalyzed: 'Pages analyzed',
-          findings: 'Findings',
-          noData: 'No data',
-          causes: 'Root causes',
-          possibleFix: 'Possible fix',
-          opportunities: 'Opportunities',
-          metrics: 'Metrics',
-          screenshot: 'Reference screenshot',
-          previousRun: 'Previous run',
-          comparisonStatus: 'Status',
-          improved: 'Improved',
-          regressed: 'Regressed',
-          stable: 'Stable',
-          newlyDiscovered: 'New URL',
-          delta: 'Delta',
-          priority: 'Priority',
-          topActions: 'Top recommended actions',
-          pageBreakdown: 'Per-page breakdown',
-          details: 'Details',
-          analyzedAt: 'Analyzed at',
-          whyItMatters: 'Why it matters',
-          whatToDo: 'What to do',
-          impactHigh: 'High',
-          impactMedium: 'Medium',
-          impactLow: 'Low',
-        }
+  const thresholds = {
+    performance: 0.8,
+    fcpMs: 1800,
+    lcpMs: 2500,
+    payloadKb: 2048,
+    avgCallMs: 800,
+    failureRatePercent: 1,
+  }
+
+  const labelsByLanguage: Record<
+    LanguageCode,
+    {
+      title: string
+      subtitle: string
+      healthScore: string
+      pagesAnalyzed: string
+      findings: string
+      noData: string
+      causes: string
+      possibleFix: string
+      opportunities: string
+      metrics: string
+      screenshot: string
+      previousRun: string
+      comparisonStatus: string
+      improved: string
+      regressed: string
+      stable: string
+      newlyDiscovered: string
+      delta: string
+      priority: string
+      topActions: string
+      pageBreakdown: string
+      details: string
+      analyzedAt: string
+      whyItMatters: string
+      whatToDo: string
+      impactHigh: string
+      impactMedium: string
+      impactLow: string
+      scoreOverview: string
+      scorePercent: string
+      severitySplit: string
+      language: string
+      rawScore: string
+      payloadLabel: string
+      imagesLabel: string
+      mediaLabel: string
+      callsAvgLabel: string
+      callsP95Label: string
+      failureRateLabel: string
+      baseUrlLabel: string
+    }
+  > = {
+    es: {
+      title: 'High Performance Analyzer Report',
+      subtitle: 'Reporte ejecutivo de performance con foco en acciones',
+      healthScore: 'Score promedio',
+      pagesAnalyzed: 'Paginas analizadas',
+      findings: 'Hallazgos',
+      noData: 'Sin datos',
+      causes: 'Causas raiz',
+      possibleFix: 'Posible solucion',
+      opportunities: 'Oportunidades',
+      metrics: 'Metricas',
+      screenshot: 'Captura de referencia',
+      previousRun: 'Ejecucion previa',
+      comparisonStatus: 'Estado',
+      improved: 'Mejoro',
+      regressed: 'Empeoro',
+      stable: 'Estable',
+      newlyDiscovered: 'Nueva URL',
+      delta: 'Delta',
+      priority: 'Prioridad',
+      topActions: 'Top acciones recomendadas',
+      pageBreakdown: 'Detalle por pagina',
+      details: 'Detalles',
+      analyzedAt: 'Analizado en',
+      whyItMatters: 'Por que importa',
+      whatToDo: 'Que hacer',
+      impactHigh: 'Alta',
+      impactMedium: 'Media',
+      impactLow: 'Baja',
+      scoreOverview: 'Score general',
+      scorePercent: 'Puntaje',
+      severitySplit: 'Distribucion de severidad',
+      language: 'Idioma',
+      rawScore: 'Score crudo',
+      payloadLabel: 'Payload',
+      imagesLabel: 'Imagenes',
+      mediaLabel: 'Video/Media',
+      callsAvgLabel: 'Llamadas promedio',
+      callsP95Label: 'Llamadas p95',
+      failureRateLabel: 'Tasa de fallas',
+      baseUrlLabel: 'URL base',
+    },
+    en: {
+      title: 'High Performance Analyzer Report',
+      subtitle: 'Executive performance report focused on actions',
+      healthScore: 'Average score',
+      pagesAnalyzed: 'Pages analyzed',
+      findings: 'Findings',
+      noData: 'No data',
+      causes: 'Root causes',
+      possibleFix: 'Possible fix',
+      opportunities: 'Opportunities',
+      metrics: 'Metrics',
+      screenshot: 'Reference screenshot',
+      previousRun: 'Previous run',
+      comparisonStatus: 'Status',
+      improved: 'Improved',
+      regressed: 'Regressed',
+      stable: 'Stable',
+      newlyDiscovered: 'New URL',
+      delta: 'Delta',
+      priority: 'Priority',
+      topActions: 'Top recommended actions',
+      pageBreakdown: 'Per-page breakdown',
+      details: 'Details',
+      analyzedAt: 'Analyzed at',
+      whyItMatters: 'Why it matters',
+      whatToDo: 'What to do',
+      impactHigh: 'High',
+      impactMedium: 'Medium',
+      impactLow: 'Low',
+      scoreOverview: 'Overall score',
+      scorePercent: 'Score',
+      severitySplit: 'Severity split',
+      language: 'Language',
+      rawScore: 'Raw score',
+      payloadLabel: 'Payload',
+      imagesLabel: 'Images',
+      mediaLabel: 'Video/Media',
+      callsAvgLabel: 'Calls avg',
+      callsP95Label: 'Calls p95',
+      failureRateLabel: 'Failure rate',
+      baseUrlLabel: 'Base URL',
+    },
+  }
+
+  const getLocalizedContent = (
+    result: AnalyzeResponse['results'][number],
+    lang: LanguageCode,
+  ): {
+    actions: string[]
+    rootCauses: UrlInsights['rootCauses']
+    issueCount: number
+  } => {
+    const actions = new Set<string>()
+    const rootCauses: UrlInsights['rootCauses'] = []
+    let issueCount = 0
+
+    if (result.performanceScore < thresholds.performance) {
+      issueCount += 1
+      actions.add(
+        lang === 'es'
+          ? 'Carga primero lo esencial y difiere scripts no criticos.'
+          : 'Load only essentials first and defer non-critical scripts.',
+      )
+      rootCauses.push({
+        cause:
+          lang === 'es'
+            ? 'La pagina carga demasiado codigo al inicio'
+            : 'The page loads too much code upfront',
+        evidence:
+          lang === 'es'
+            ? `Performance score bajo: actual ${result.performanceScore}, esperado >= ${thresholds.performance}.`
+            : `Low performance score: current ${result.performanceScore}, expected >= ${thresholds.performance}.`,
+        impact: 'high',
+        possibleFix:
+          lang === 'es'
+            ? 'Prioriza recursos criticos y retrasa codigo secundario.'
+            : 'Prioritize critical resources and delay secondary code.',
+      })
+    }
+
+    if ((result.firstContentfulPaintMs ?? 0) > thresholds.fcpMs) {
+      issueCount += 1
+      actions.add(
+        lang === 'es'
+          ? 'Reduce recursos bloqueantes y prioriza CSS critico.'
+          : 'Reduce render-blocking resources and prioritize critical CSS.',
+      )
+      rootCauses.push({
+        cause:
+          lang === 'es'
+            ? 'El primer contenido tarda en aparecer'
+            : 'The first content appears too late',
+        evidence:
+          lang === 'es'
+            ? `FCP lento: actual ${result.firstContentfulPaintMs ?? 'N/A'} ms, esperado <= ${thresholds.fcpMs} ms.`
+            : `Slow FCP: current ${result.firstContentfulPaintMs ?? 'N/A'} ms, expected <= ${thresholds.fcpMs} ms.`,
+        impact: 'medium',
+        possibleFix:
+          lang === 'es'
+            ? 'Optimiza CSS/fuentes iniciales para mostrar contenido antes.'
+            : 'Optimize initial CSS/fonts to show content sooner.',
+      })
+    }
+
+    if ((result.largestContentfulPaintMs ?? 0) > thresholds.lcpMs) {
+      issueCount += 1
+      actions.add(
+        lang === 'es'
+          ? 'Optimiza el hero principal y retrasa recursos secundarios.'
+          : 'Optimize the main hero content and delay secondary resources.',
+      )
+      rootCauses.push({
+        cause:
+          lang === 'es'
+            ? 'El contenido principal tarda en mostrarse'
+            : 'The main content loads too late',
+        evidence:
+          lang === 'es'
+            ? `LCP lento: actual ${result.largestContentfulPaintMs ?? 'N/A'} ms, esperado <= ${thresholds.lcpMs} ms.`
+            : `Slow LCP: current ${result.largestContentfulPaintMs ?? 'N/A'} ms, expected <= ${thresholds.lcpMs} ms.`,
+        impact: 'high',
+        possibleFix:
+          lang === 'es'
+            ? 'Reduce peso del contenido principal y precarga recursos clave.'
+            : 'Reduce main-content weight and preload key resources.',
+      })
+    }
+
+    if (result.totalByteWeightKb > thresholds.payloadKb) {
+      issueCount += 1
+      actions.add(
+        lang === 'es'
+          ? 'Comprime imagenes y elimina archivos que no aportan valor.'
+          : 'Compress images and remove files that do not add value.',
+      )
+      rootCauses.push({
+        cause: lang === 'es' ? 'La pagina pesa demasiado' : 'The page payload is too heavy',
+        evidence:
+          lang === 'es'
+            ? `Pagina pesada: actual ${result.totalByteWeightKb} KB, esperado <= ${thresholds.payloadKb} KB.`
+            : `Heavy page payload: current ${result.totalByteWeightKb} KB, expected <= ${thresholds.payloadKb} KB.`,
+        impact: 'high',
+        possibleFix:
+          lang === 'es'
+            ? 'Usa compresion y elimina recursos innecesarios.'
+            : 'Use compression and remove unnecessary resources.',
+      })
+    }
+
+    if (typeof result.callTimeAvgMs === 'number' && result.callTimeAvgMs > thresholds.avgCallMs) {
+      issueCount += 1
+      actions.add(
+        lang === 'es'
+          ? 'Optimiza consultas, agrega cache y revisa endpoints lentos.'
+          : 'Optimize queries, add caching, and review slow endpoints.',
+      )
+      rootCauses.push({
+        cause: lang === 'es' ? 'El servidor responde lento' : 'The server responds too slowly',
+        evidence:
+          lang === 'es'
+            ? `Llamadas API lentas: promedio actual ${result.callTimeAvgMs.toFixed(2)} ms, esperado <= ${thresholds.avgCallMs} ms.`
+            : `Slow API calls: current average ${result.callTimeAvgMs.toFixed(2)} ms, expected <= ${thresholds.avgCallMs} ms.`,
+        impact: 'medium',
+        possibleFix:
+          lang === 'es'
+            ? 'Revisa base de datos, cache y endpoints con mayor latencia.'
+            : 'Review database, cache, and highest-latency endpoints.',
+      })
+    }
+
+    if (
+      typeof result.callsFailedRate === 'number' &&
+      result.callsFailedRate > thresholds.failureRatePercent
+    ) {
+      issueCount += 1
+      actions.add(
+        lang === 'es'
+          ? 'Revisa codigos de error, timeouts y endpoints inestables.'
+          : 'Review status codes, timeouts, and unstable endpoints.',
+      )
+      rootCauses.push({
+        cause:
+          lang === 'es' ? 'Demasiadas solicitudes estan fallando' : 'Too many requests are failing',
+        evidence:
+          lang === 'es'
+            ? `Tasa de error alta: actual ${result.callsFailedRate.toFixed(2)}%, esperado <= ${thresholds.failureRatePercent}%.`
+            : `High error rate: current ${result.callsFailedRate.toFixed(2)}%, expected <= ${thresholds.failureRatePercent}%.`,
+        impact: 'high',
+        possibleFix:
+          lang === 'es'
+            ? 'Valida retries, timeouts y manejo de errores por endpoint.'
+            : 'Validate retries, timeouts, and per-endpoint error handling.',
+      })
+    }
+
+    return { actions: [...actions], rootCauses, issueCount }
+  }
 
   const averageScore = payload.results.length
     ? Number(
@@ -813,96 +1074,198 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
         ).toFixed(2),
       )
     : 0
-  const findings = payload.results.reduce((sum, item) => sum + item.issues.length, 0)
 
-  const topActions = payload.results
-    .flatMap((item) => item.suggestions)
-    .filter((value, index, source) => source.indexOf(value) === index)
-    .slice(0, 3)
+  const averageScorePercent = Math.round(averageScore * 100)
+  const overallScoreClass =
+    averageScorePercent >= 90 ? 'good' : averageScorePercent >= 50 ? 'average' : 'poor'
 
-  const rows = payload.results
-    .map((result) => {
-      const comparisonStatus =
-        result.comparison?.status === 'improved'
-          ? labels.improved
-          : result.comparison?.status === 'regressed'
-            ? labels.regressed
-            : result.comparison?.status === 'stable'
-              ? labels.stable
-              : labels.newlyDiscovered
+  const buildLanguageSection = (lang: LanguageCode): string => {
+    const labels = labelsByLanguage[lang]
+    const localizedResults = payload.results.map((result) => ({
+      result,
+      localized: getLocalizedContent(result, lang),
+    }))
 
-      return `
-      <section class="card">
-        <div class="card-head">
-          <h2>${result.pageUrl}</h2>
-          <span class="status ${result.comparison?.status ?? 'new'}">${comparisonStatus}</span>
-        </div>
-        <div class="kpis">
-          <div class="kpi"><span>Score</span><b>${result.performanceScore}</b></div>
-          <div class="kpi"><span>FCP</span><b>${result.firstContentfulPaintMs ?? 'N/A'} ms</b></div>
-          <div class="kpi"><span>LCP</span><b>${result.largestContentfulPaintMs ?? 'N/A'} ms</b></div>
-          <div class="kpi"><span>TTI</span><b>${result.timeToInteractiveMs ?? 'N/A'} ms</b></div>
-        </div>
-        <div class="quick-list">
-          <p><b>${labels.comparisonStatus}:</b> ${comparisonStatus}</p>
-          <p><b>${labels.previousRun}:</b> ${result.comparison?.previousAnalyzedAt ?? labels.noData}</p>
-          <p><b>Score ${labels.delta}:</b> ${result.comparison?.deltas.performanceScore ?? labels.noData}</p>
-          <p><b>LCP ${labels.delta}:</b> ${result.comparison?.deltas.largestContentfulPaintMs ?? labels.noData} ms</p>
-          <p><b>Req p95 ${labels.delta}:</b> ${result.comparison?.deltas.callTimeP95Ms ?? labels.noData} ms</p>
-        </div>
-        <details>
-          <summary>${labels.details}</summary>
-          <h3>${labels.metrics}</h3>
-          <ul>
-            <li>Payload: <b>${result.totalByteWeightKb} KB</b></li>
-            <li>Images: <b>${result.imageBytesKb} KB</b></li>
-            <li>Video/Media: <b>${result.videoBytesKb} KB</b></li>
-            <li>Calls avg: <b>${result.callTimeAvgMs ?? 'N/A'} ms</b></li>
-            <li>Calls p95: <b>${result.callTimeP95Ms ?? 'N/A'} ms</b></li>
-            <li>Failure rate: <b>${result.callsFailedRate ?? 'N/A'}%</b></li>
-          </ul>
-          <h3>${labels.causes}</h3>
-          <ul>
+    const findings = localizedResults.reduce((sum, item) => sum + item.localized.issueCount, 0)
+    const severity = localizedResults.reduce(
+      (acc, item) => {
+        for (const cause of item.localized.rootCauses) {
+          if (cause.impact === 'high') acc.high += 1
+          else if (cause.impact === 'medium') acc.medium += 1
+          else acc.low += 1
+        }
+        return acc
+      },
+      { high: 0, medium: 0, low: 0 },
+    )
+
+    const severityTotal = Math.max(1, severity.high + severity.medium + severity.low)
+    const highPercent = Number(((severity.high / severityTotal) * 100).toFixed(2))
+    const mediumPercent = Number(((severity.medium / severityTotal) * 100).toFixed(2))
+
+    const topActions = localizedResults
+      .flatMap((item) => item.localized.actions)
+      .filter((value, index, source) => source.indexOf(value) === index)
+      .slice(0, 3)
+
+    const rows = localizedResults
+      .map(({ result, localized }) => {
+        const comparisonStatus =
+          result.comparison?.status === 'improved'
+            ? labels.improved
+            : result.comparison?.status === 'regressed'
+              ? labels.regressed
+              : result.comparison?.status === 'stable'
+                ? labels.stable
+                : labels.newlyDiscovered
+
+        return `
+        <section class="card">
+          <div class="card-head">
+            <h2>${result.pageUrl}</h2>
+            <span class="status ${result.comparison?.status ?? 'new'}">${comparisonStatus}</span>
+          </div>
+          <div class="score-row">
+            <span>${labels.scorePercent}</span>
+            <div class="score-bar">
+              <div class="score-fill ${
+                result.performanceScore >= 0.9
+                  ? 'good'
+                  : result.performanceScore >= 0.5
+                    ? 'average'
+                    : 'poor'
+              }" style="width: ${Math.round(result.performanceScore * 100)}%"></div>
+            </div>
+            <b>${Math.round(result.performanceScore * 100)}</b>
+          </div>
+          <div class="kpis">
+            <div class="kpi"><span>${labels.rawScore}</span><b>${result.performanceScore}</b></div>
+            <div class="kpi"><span>FCP</span><b>${result.firstContentfulPaintMs ?? 'N/A'} ms</b></div>
+            <div class="kpi"><span>LCP</span><b>${result.largestContentfulPaintMs ?? 'N/A'} ms</b></div>
+            <div class="kpi"><span>TTI</span><b>${result.timeToInteractiveMs ?? 'N/A'} ms</b></div>
+          </div>
+          <div class="quick-list">
+            <p><b>${labels.comparisonStatus}:</b> ${comparisonStatus}</p>
+            <p><b>${labels.previousRun}:</b> ${result.comparison?.previousAnalyzedAt ?? labels.noData}</p>
+            <p><b>Score ${labels.delta}:</b> ${result.comparison?.deltas.performanceScore ?? labels.noData}</p>
+            <p><b>LCP ${labels.delta}:</b> ${result.comparison?.deltas.largestContentfulPaintMs ?? labels.noData} ms</p>
+            <p><b>Req p95 ${labels.delta}:</b> ${result.comparison?.deltas.callTimeP95Ms ?? labels.noData} ms</p>
+          </div>
+          <details>
+            <summary>${labels.details}</summary>
+            <h3>${labels.metrics}</h3>
+            <ul>
+              <li>${labels.payloadLabel}: <b>${result.totalByteWeightKb} KB</b></li>
+              <li>${labels.imagesLabel}: <b>${result.imageBytesKb} KB</b></li>
+              <li>${labels.mediaLabel}: <b>${result.videoBytesKb} KB</b></li>
+              <li>${labels.callsAvgLabel}: <b>${result.callTimeAvgMs ?? 'N/A'} ms</b></li>
+              <li>${labels.callsP95Label}: <b>${result.callTimeP95Ms ?? 'N/A'} ms</b></li>
+              <li>${labels.failureRateLabel}: <b>${result.callsFailedRate ?? 'N/A'}%</b></li>
+            </ul>
+            <h3>${labels.causes}</h3>
+            <ul>
+              ${
+                localized.rootCauses.length
+                  ? localized.rootCauses
+                      .map((item) => {
+                        const impactLabel =
+                          item.impact === 'high'
+                            ? labels.impactHigh
+                            : item.impact === 'medium'
+                              ? labels.impactMedium
+                              : labels.impactLow
+
+                        return `<li><b>${item.cause}</b> (${labels.priority}: ${impactLabel})<br /><span class="muted">${labels.whyItMatters}:</span> ${item.evidence}<br /><span class="muted">${labels.whatToDo}:</span> ${item.possibleFix}</li>`
+                      })
+                      .join('')
+                  : `<li>${labels.noData}</li>`
+              }
+            </ul>
+            <h3>${labels.opportunities}</h3>
+            <ul>
+              ${
+                result.opportunities.length
+                  ? result.opportunities
+                      .map(
+                        (item) =>
+                          `<li><b>${item.title}</b> (${item.score ?? 'N/A'}) - ${item.detail}</li>`,
+                      )
+                      .join('')
+                  : `<li>${labels.noData}</li>`
+              }
+            </ul>
             ${
-              result.rootCauses.length
-                ? result.rootCauses
-                    .map((item) => {
-                      const impactLabel =
-                        item.impact === 'high'
-                          ? labels.impactHigh
-                          : item.impact === 'medium'
-                            ? labels.impactMedium
-                            : labels.impactLow
+              result.finalScreenshotDataUrl
+                ? `<h3>${labels.screenshot}</h3><img class="shot" src="${result.finalScreenshotDataUrl}" alt="Lighthouse screenshot for ${result.pageUrl}" />`
+                : ''
+            }
+          </details>
+        </section>
+      `
+      })
+      .join('')
 
-                      return `<li><b>${item.cause}</b> (${labels.priority}: ${impactLabel})<br /><span class="muted">${labels.whyItMatters}:</span> ${item.evidence}<br /><span class="muted">${labels.whatToDo}:</span> ${item.possibleFix}</li>`
-                    })
-                    .join('')
-                : `<li>${labels.noData}</li>`
-            }
-          </ul>
-          <h3>${labels.opportunities}</h3>
-          <ul>
+    return `
+      <section class="lang-block ${lang === payload.language ? 'active' : ''}" data-lang="${lang}">
+        <h1>${labels.title}</h1>
+        <p class="meta">${labels.subtitle}</p>
+        <div class="hero">
+          <p class="meta">${labels.baseUrlLabel}: ${payload.baseUrl} | ${labels.analyzedAt}: ${payload.analyzedAt}</p>
+          <div class="overview">
+            <div class="score-gauge ${overallScoreClass}" style="--score:${averageScorePercent}; --gauge:${
+              overallScoreClass === 'good'
+                ? '#16a34a'
+                : overallScoreClass === 'average'
+                  ? '#f59e0b'
+                  : '#dc2626'
+            }">
+              <div class="inner">
+                <div>
+                  <b>${averageScorePercent}</b>
+                  <span>${labels.scoreOverview}</span>
+                </div>
+              </div>
+            </div>
+            <div>
+              <h3>${labels.severitySplit}</h3>
+              <div class="score-gauge" style="--score:100; --gauge: conic-gradient(#dc2626 0 ${highPercent}%, #f59e0b ${highPercent}% ${highPercent + mediumPercent}%, #16a34a ${highPercent + mediumPercent}% 100%); background: var(--gauge); width: 116px; height: 116px;">
+                <div class="inner" style="width: 86px; height: 86px;"><span>${findings}</span></div>
+              </div>
+              <ul class="legend">
+                <li><span class="dot high"></span>${labels.impactHigh}: ${severity.high}</li>
+                <li><span class="dot medium"></span>${labels.impactMedium}: ${severity.medium}</li>
+                <li><span class="dot low"></span>${labels.impactLow}: ${severity.low}</li>
+              </ul>
+            </div>
+          </div>
+          <div class="hero-grid">
+            <div class="hero-item">
+              <span>${labels.healthScore}</span>
+              <b>${averageScorePercent}</b>
+            </div>
+            <div class="hero-item">
+              <span>${labels.pagesAnalyzed}</span>
+              <b>${payload.results.length}</b>
+            </div>
+            <div class="hero-item">
+              <span>${labels.findings}</span>
+              <b>${findings}</b>
+            </div>
+          </div>
+          <div class="actions">
+            <h3>${labels.topActions}</h3>
             ${
-              result.opportunities.length
-                ? result.opportunities
-                    .map(
-                      (item) =>
-                        `<li><b>${item.title}</b> (${item.score ?? 'N/A'}) - ${item.detail}</li>`,
-                    )
-                    .join('')
-                : `<li>${labels.noData}</li>`
+              topActions.length
+                ? `<ol>${topActions.map((item) => `<li>${item}</li>`).join('')}</ol>`
+                : `<p>${labels.noData}</p>`
             }
-          </ul>
-          ${
-            result.finalScreenshotDataUrl
-              ? `<h3>${labels.screenshot}</h3><img class="shot" src="${result.finalScreenshotDataUrl}" alt="Lighthouse screenshot for ${result.pageUrl}" />`
-              : ''
-          }
-        </details>
+          </div>
+        </div>
+        <p class="meta"><b>${labels.pageBreakdown}</b></p>
+        ${rows}
       </section>
     `
-    })
-    .join('')
+  }
 
   return `
 <!doctype html>
@@ -917,7 +1280,18 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
       h2 { margin: 0; font-size: 18px; word-break: break-word; color: #0f172a; }
       h3 { margin-bottom: 8px; margin-top: 16px; font-size: 14px; color: #334155; }
       .meta { color: #475569; margin-bottom: 14px; }
+      .language-toggle { display: inline-flex; gap: 6px; margin-bottom: 16px; align-items: center; }
+      .language-toggle .label { color: #64748b; font-size: 13px; }
+      .language-toggle button { border: 1px solid #cbd5e1; background: #fff; color: #334155; border-radius: 999px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+      .language-toggle button.active { background: #0f172a; color: #fff; border-color: #0f172a; }
+      .lang-block { display: none; }
+      .lang-block.active { display: block; }
       .hero { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+      .overview { display: grid; grid-template-columns: 160px 1fr; gap: 14px; align-items: center; margin-bottom: 14px; }
+      .score-gauge { width: 140px; height: 140px; border-radius: 999px; display: grid; place-items: center; background: conic-gradient(var(--gauge) calc(var(--score) * 1%), #e2e8f0 0); }
+      .score-gauge .inner { width: 108px; height: 108px; border-radius: 999px; background: #fff; display: grid; place-items: center; text-align: center; }
+      .score-gauge b { font-size: 30px; color: #0f172a; line-height: 1; }
+      .score-gauge span { font-size: 12px; color: #64748b; }
       .hero-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
       .hero-item { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; }
       .hero-item span { color: #64748b; display: block; font-size: 12px; }
@@ -932,6 +1306,13 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
       .status.regressed { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
       .status.stable { background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
       .status.new { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+      .score-row { display: grid; grid-template-columns: 110px 1fr 40px; gap: 8px; align-items: center; margin-bottom: 10px; }
+      .score-row span { font-size: 12px; color: #64748b; }
+      .score-bar { height: 8px; border-radius: 999px; overflow: hidden; background: #e2e8f0; }
+      .score-fill { height: 100%; }
+      .score-fill.good { background: #16a34a; }
+      .score-fill.average { background: #f59e0b; }
+      .score-fill.poor { background: #dc2626; }
       .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
       .kpi { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; }
       .kpi span { display: block; color: #64748b; font-size: 12px; }
@@ -942,41 +1323,36 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
       summary { cursor: pointer; color: #334155; font-weight: 600; }
       ul { padding-left: 18px; }
       li { margin-bottom: 8px; }
+      .legend { display: flex; gap: 12px; flex-wrap: wrap; margin: 6px 0 0; padding: 0; list-style: none; }
+      .legend li { display: inline-flex; align-items: center; gap: 6px; color: #475569; font-size: 12px; margin: 0; }
+      .dot { width: 10px; height: 10px; border-radius: 999px; display: inline-block; }
+      .dot.high { background: #dc2626; }
+      .dot.medium { background: #f59e0b; }
+      .dot.low { background: #16a34a; }
       .muted { color: #64748b; font-weight: 600; }
       .shot { width: 100%; max-width: 860px; border-radius: 8px; border: 1px solid #e2e8f0; }
-      @media (max-width: 960px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .hero-grid { grid-template-columns: 1fr; } }
+      @media (max-width: 960px) { .overview { grid-template-columns: 1fr; } .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .hero-grid { grid-template-columns: 1fr; } }
     </style>
   </head>
   <body>
-    <h1>${labels.title}</h1>
-    <p class="meta">${labels.subtitle}</p>
-    <div class="hero">
-      <p class="meta">Base URL: ${payload.baseUrl} | ${labels.analyzedAt}: ${payload.analyzedAt}</p>
-      <div class="hero-grid">
-        <div class="hero-item">
-          <span>${labels.healthScore}</span>
-          <b>${averageScore}</b>
-        </div>
-        <div class="hero-item">
-          <span>${labels.pagesAnalyzed}</span>
-          <b>${payload.results.length}</b>
-        </div>
-        <div class="hero-item">
-          <span>${labels.findings}</span>
-          <b>${findings}</b>
-        </div>
-      </div>
-      <div class="actions">
-        <h3>${labels.topActions}</h3>
-        ${
-          topActions.length
-            ? `<ol>${topActions.map((item) => `<li>${item}</li>`).join('')}</ol>`
-            : `<p>${labels.noData}</p>`
-        }
-      </div>
+    <div class="language-toggle">
+      <span class="label">Language</span>
+      <button type="button" data-lang-btn="en">EN</button>
+      <button type="button" data-lang-btn="es">ES</button>
     </div>
-    <p class="meta"><b>${labels.pageBreakdown}</b></p>
-    ${rows}
+    ${buildLanguageSection('en')}
+    ${buildLanguageSection('es')}
+    <script>
+      const buttons = Array.from(document.querySelectorAll('[data-lang-btn]'))
+      const blocks = Array.from(document.querySelectorAll('[data-lang]'))
+      const initialLanguage = ${JSON.stringify(payload.language)}
+      const setLanguage = (lang) => {
+        buttons.forEach((button) => button.classList.toggle('active', button.dataset.langBtn === lang))
+        blocks.forEach((block) => block.classList.toggle('active', block.dataset.lang === lang))
+      }
+      buttons.forEach((button) => button.addEventListener('click', () => setLanguage(button.dataset.langBtn)))
+      setLanguage(initialLanguage)
+    </script>
   </body>
 </html>
 `
