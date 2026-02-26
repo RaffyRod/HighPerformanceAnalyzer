@@ -1,0 +1,26 @@
+{
+  "name": "@hpa/api",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "lint": "eslint \"src/**/*.{ts,js}\""
+  },
+  "dependencies": {
+    "@hpa/shared": "workspace:*",
+    "@fastify/cors": "^11.1.0",
+    "cheerio": "^1.1.2",
+    "chrome-launcher": "^1.2.1",
+    "fastify": "^5.6.2",
+    "lighthouse": "^12.8.2",
+    "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "tsx": "^4.20.6",
+    "typescript": "~5.9.3"
+  }
+}

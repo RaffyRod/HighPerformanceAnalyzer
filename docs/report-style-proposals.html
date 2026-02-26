@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Propuestas de Estilos de Reportería</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --surface: #121a32;
+        --text: #e5e7eb;
+        --muted: #a3aab8;
+        --line: #2a365d;
+        --accent: #5b8cff;
+      }
+      body {
+        margin: 0;
+        font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        background: radial-gradient(circle at top, #111b3a, var(--bg));
+        color: var(--text);
+      }
+      .container {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 28px 18px 48px;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 30px;
+      }
+      .lead {
+        margin: 0 0 18px;
+        color: var(--muted);
+      }
+      .refs {
+        border: 1px solid var(--line);
+        background: #0f1730;
+        border-radius: 10px;
+        padding: 14px;
+        margin-bottom: 20px;
+      }
+      .refs ul {
+        margin: 8px 0 0;
+        padding-left: 18px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+        gap: 14px;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 14px;
+      }
+      .card h2 {
+        margin: 0 0 6px;
+        font-size: 19px;
+      }
+      .pill {
+        display: inline-block;
+        font-size: 12px;
+        color: #c9d4ff;
+        background: #1d2a53;
+        border: 1px solid #3e5191;
+        border-radius: 999px;
+        padding: 3px 8px;
+        margin-bottom: 8px;
+      }
+      .meta {
+        color: var(--muted);
+        font-size: 14px;
+        margin: 0 0 10px;
+      }
+      .mock {
+        border: 1px dashed #3e4f80;
+        border-radius: 8px;
+        padding: 10px;
+        margin: 10px 0;
+        background: #0d1428;
+        font-size: 13px;
+      }
+      ul {
+        margin: 8px 0;
+        padding-left: 18px;
+      }
+      .score {
+        margin-top: 8px;
+        font-size: 13px;
+        color: #d2d8f2;
+      }
+      .choose {
+        margin-top: 20px;
+        background: #121b35;
+        border: 1px solid #2e3d6a;
+        border-radius: 12px;
+        padding: 16px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+        font-size: 14px;
+      }
+      th,
+      td {
+        text-align: left;
+        border-bottom: 1px solid #2a365d;
+        padding: 8px 6px;
+      }
+      th {
+        color: #c8d1ea;
+      }
+      .recommended {
+        color: #9bd3a8;
+        font-weight: 600;
+      }
+      a {
+        color: #9ec0ff;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <h1>Propuestas de estilos de reportería</h1>
+      <p class="lead">
+        Basado en buenas prácticas de dashboards y dataviz (NN/g, Material, Datawrapper), aquí
+        tienes estilos viables para tu reporte de performance con Lighthouse + k6.
+      </p>
+
+      <section class="refs">
+        <strong>Referencias usadas:</strong>
+        <ul>
+          <li>NN/g: dashboards at-a-glance, preattentive processing y tipos de gráfico.</li>
+          <li>NN/g: framework 3C para charting (Context, Clutter, Contrast).</li>
+          <li>Material Design: uso de cards/tablas y jerarquía visual para data densa.</li>
+          <li>Datawrapper: elección de chart según el mensaje principal.</li>
+        </ul>
+      </section>
+
+      <section class="grid">
+        <article class="card">
+          <span class="pill">A. Executive KPI</span>
+          <h2>Dashboard ejecutivo</h2>
+          <p class="meta">Ideal para CTO, Product Leads, stakeholders de negocio.</p>
+          <div class="mock">
+            [KPI Cards] Performance Score | LCP | Error Rate<br />
+            [Trend] Evolución semanal<br />
+            [Top Issues] 5 violaciones críticas
+          </div>
+          <ul>
+            <li>Lectura en menos de 30 segundos.</li>
+            <li>Fuerte jerarquía visual y colores de estado.</li>
+            <li>Poca profundidad técnica en primer nivel.</li>
+          </ul>
+          <p class="score">Nivel técnico: Bajo/Medio | Rapidez de lectura: Alta</p>
+        </article>
+
+        <article class="card">
+          <span class="pill">B. Engineering Deep-Dive</span>
+          <h2>Reporte técnico detallado</h2>
+          <p class="meta">Ideal para frontend/backend/performance engineers.</p>
+          <div class="mock">
+            [Page Section] URL + score + traces<br />
+            [Waterfall] Calls lentas / fallidas<br />
+            [Assets] imágenes/video con peso y recomendaciones por recurso
+          </div>
+          <ul>
+            <li>Máxima trazabilidad para fixes.</li>
+            <li>Incluye thresholds, p95 y distribución por endpoint.</li>
+            <li>Más denso; requiere más tiempo de lectura.</li>
+          </ul>
+          <p class="score">Nivel técnico: Alto | Rapidez de lectura: Media</p>
+        </article>
+
+        <article class="card">
+          <span class="pill">C. Storytelling Timeline</span>
+          <h2>Reporte narrativo por hallazgo</h2>
+          <p class="meta">Ideal para presentar resultados en demos o retrospectivas.</p>
+          <div class="mock">
+            1) Hallazgo crítico (LCP elevado)<br />
+            2) Evidencia (métrica + captura)<br />
+            3) Impacto usuario<br />
+            4) Acción recomendada
+          </div>
+          <ul>
+            <li>Muy claro para explicar causa-efecto.</li>
+            <li>Excelente para alineación cross-team.</li>
+            <li>Menos eficiente para comparar muchas URLs.</li>
+          </ul>
+          <p class="score">Nivel técnico: Medio | Comunicación: Muy alta</p>
+        </article>
+
+        <article class="card">
+          <span class="pill">D. Compliance & SLA</span>
+          <h2>Reporte por cumplimiento de umbrales</h2>
+          <p class="meta">Ideal cuando hay SLO/SLA o auditoría periódica.</p>
+          <div class="mock">
+            [Pass/Fail Matrix] URL x Regla<br />
+            Reglas: LCP&lt;2.5s, FCP&lt;1.8s, fail rate&lt;1%, image budget&lt;1MB
+          </div>
+          <ul>
+            <li>Muy objetivo: cumple/no cumple.</li>
+            <li>Fácil de automatizar en CI/CD.</li>
+            <li>No explica tanto el porqué del problema.</li>
+          </ul>
+          <p class="score">Nivel técnico: Medio | Governanza: Muy alta</p>
+        </article>
+
+        <article class="card">
+          <span class="pill">E. Minimal Clean</span>
+          <h2>Reporte minimalista</h2>
+          <p class="meta">Ideal para compartir rápido en cliente o leadership externo.</p>
+          <div class="mock">
+            Resumen de salud general + 3 gráficas simples + lista de acciones
+          </div>
+          <ul>
+            <li>Muy limpio, moderno y fácil de leer.</li>
+            <li>Baja carga cognitiva (principio NN/g).</li>
+            <li>Puede quedarse corto para debugging técnico.</li>
+          </ul>
+          <p class="score">Nivel técnico: Bajo | Estética: Alta</p>
+        </article>
+      </section>
+
+      <section class="choose">
+        <h2>Recomendación para tu producto</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Escenario</th>
+              <th>Estilo sugerido</th>
+              <th>Motivo</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Uso diario en equipo técnico</td>
+              <td class="recommended">B + D (híbrido)</td>
+              <td>Profundidad técnica + control de cumplimiento en una sola vista.</td>
+            </tr>
+            <tr>
+              <td>Demo a stakeholders no técnicos</td>
+              <td class="recommended">A + C</td>
+              <td>KPIs claros + narrativa de impacto y acciones.</td>
+            </tr>
+            <tr>
+              <td>Primera versión MVP</td>
+              <td class="recommended">A</td>
+              <td>Implementación rápida y alto valor inmediato.</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>
+          Si quieres, en el siguiente paso te construyo el template final elegido dentro de tu app
+          en `apps/web` y lo conectamos al reporte real generado por backend.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>
