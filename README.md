@@ -9,6 +9,13 @@ Analyze any website with Lighthouse + load checks, discover internal URLs, and g
 - 📡 Request latency + failure insights (k6 or internal fallback)
 - 🌍 Bilingual UI/report (`en` / `es`)
 - 📊 Friendly HTML report (score overview, priorities, causes, actions)
+- 🧭 Executive readability layer per URL:
+  - Overall status badge (`Healthy` / `Needs attention` / `Critical`)
+  - Gap table (`Current` vs `Target` + `% gap`)
+  - "Focus first" priorities to act quickly
+- 🟥🟩 Opportunity status colors:
+  - Red when metric fails expected threshold
+  - Green when metric passes expected threshold
 - 🕒 Before/after comparison against previous runs
 - 🗂️ Report retention:
   - Stored in `reports/`

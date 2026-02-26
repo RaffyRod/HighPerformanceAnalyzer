@@ -824,6 +824,21 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
       callsP95Label: string
       failureRateLabel: string
       baseUrlLabel: string
+      opportunityCurrent: string
+      opportunityExpected: string
+      opportunityStatus: string
+      opportunityGood: string
+      opportunityNeedsWork: string
+      opportunityCritical: string
+      executiveSummary: string
+      overallStatus: string
+      targetLabel: string
+      gapLabel: string
+      onTarget: string
+      focusFirst: string
+      statusHealthy: string
+      statusAttention: string
+      statusCritical: string
     }
   > = {
     es: {
@@ -867,6 +882,21 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
       callsP95Label: 'Llamadas p95',
       failureRateLabel: 'Tasa de fallas',
       baseUrlLabel: 'URL base',
+      opportunityCurrent: 'Actual',
+      opportunityExpected: 'Esperado',
+      opportunityStatus: 'Estado',
+      opportunityGood: 'Bien',
+      opportunityNeedsWork: 'Mejorable',
+      opportunityCritical: 'Critico',
+      executiveSummary: 'Resumen ejecutivo',
+      overallStatus: 'Estado general',
+      targetLabel: 'Objetivo',
+      gapLabel: 'Brecha',
+      onTarget: 'En objetivo',
+      focusFirst: 'Priorizar',
+      statusHealthy: 'Saludable',
+      statusAttention: 'Atencion',
+      statusCritical: 'Critico',
     },
     en: {
       title: 'High Performance Analyzer Report',
@@ -909,6 +939,21 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
       callsP95Label: 'Calls p95',
       failureRateLabel: 'Failure rate',
       baseUrlLabel: 'Base URL',
+      opportunityCurrent: 'Current',
+      opportunityExpected: 'Expected',
+      opportunityStatus: 'Status',
+      opportunityGood: 'Good',
+      opportunityNeedsWork: 'Needs work',
+      opportunityCritical: 'Critical',
+      executiveSummary: 'Executive summary',
+      overallStatus: 'Overall status',
+      targetLabel: 'Target',
+      gapLabel: 'Gap',
+      onTarget: 'On target',
+      focusFirst: 'Focus first',
+      statusHealthy: 'Healthy',
+      statusAttention: 'Needs attention',
+      statusCritical: 'Critical',
     },
   }
 
@@ -1079,6 +1124,91 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
   const overallScoreClass =
     averageScorePercent >= 90 ? 'good' : averageScorePercent >= 50 ? 'average' : 'poor'
 
+  const getOpportunityTarget = (title: string, lang: LanguageCode): string => {
+    const normalized = title.toLowerCase()
+    if (normalized.includes('first contentful paint')) return '<= 1.8 s'
+    if (normalized.includes('largest contentful paint')) return '<= 2.5 s'
+    if (normalized.includes('speed index')) return '<= 3.4 s'
+    if (normalized.includes('total blocking time')) return '<= 200 ms'
+    if (normalized.includes('max potential first input delay')) return '<= 100 ms'
+    if (normalized.includes('cumulative layout shift')) return '<= 0.10'
+    return lang === 'es' ? 'Score >= 0.90' : 'Score >= 0.90'
+  }
+
+  const getOpportunityThreshold = (
+    title: string,
+  ): { max: number; unit: 's' | 'ms' | 'value' } | null => {
+    const normalized = title.toLowerCase()
+    if (normalized.includes('first contentful paint')) return { max: 1.8, unit: 's' }
+    if (normalized.includes('largest contentful paint')) return { max: 2.5, unit: 's' }
+    if (normalized.includes('speed index')) return { max: 3.4, unit: 's' }
+    if (normalized.includes('total blocking time')) return { max: 200, unit: 'ms' }
+    if (normalized.includes('max potential first input delay')) return { max: 100, unit: 'ms' }
+    if (normalized.includes('cumulative layout shift')) return { max: 0.1, unit: 'value' }
+    return null
+  }
+
+  const getOpportunityStatusClass = (
+    title: string,
+    detail: string,
+    score: number | null,
+  ): 'good' | 'average' | 'poor' => {
+    const threshold = getOpportunityThreshold(title)
+    if (threshold) {
+      const currentMatch = detail.match(/(\d+(?:\.\d+)?)/)
+      if (currentMatch) {
+        const currentValue = Number(currentMatch[1])
+        return currentValue <= threshold.max ? 'good' : 'poor'
+      }
+    }
+    if (typeof score === 'number') return score >= 0.9 ? 'good' : score >= 0.5 ? 'average' : 'poor'
+    return 'average'
+  }
+
+  const formatMetricValue = (value: number | null, unit: 'score' | 'ms' | 'kb'): string => {
+    if (value === null) return 'N/A'
+    if (unit === 'score') return value.toFixed(2)
+    if (unit === 'ms')
+      return value >= 1000 ? `${(value / 1000).toFixed(1)} s` : `${Math.round(value)} ms`
+    return value >= 1024 ? `${(value / 1024).toFixed(2)} MB` : `${value.toFixed(2)} KB`
+  }
+
+  const getMetricStatus = (
+    current: number | null,
+    expected: number,
+    betterDirection: 'higher' | 'lower',
+  ): 'good' | 'average' | 'poor' => {
+    if (typeof current !== 'number') return 'average'
+    if (betterDirection === 'higher') {
+      if (current >= expected) return 'good'
+      if (current >= expected * 0.75) return 'average'
+      return 'poor'
+    }
+    if (current <= expected) return 'good'
+    if (current <= expected * 1.5) return 'average'
+    return 'poor'
+  }
+
+  const formatGap = (
+    current: number | null,
+    expected: number,
+    betterDirection: 'higher' | 'lower',
+    labels: (typeof labelsByLanguage)[LanguageCode],
+  ): string => {
+    if (typeof current !== 'number') return 'N/A'
+    const ratio =
+      betterDirection === 'higher'
+        ? (current - expected) / expected
+        : (current - expected) / expected
+    if (
+      (betterDirection === 'higher' && current >= expected) ||
+      (betterDirection === 'lower' && current <= expected)
+    ) {
+      return labels.onTarget
+    }
+    return `${ratio > 0 ? '+' : ''}${Math.round(ratio * 100)}%`
+  }
+
   const buildLanguageSection = (lang: LanguageCode): string => {
     const labels = labelsByLanguage[lang]
     const localizedResults = payload.results.map((result) => ({
@@ -1119,6 +1249,62 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
                 ? labels.stable
                 : labels.newlyDiscovered
 
+        const summaryMetrics = [
+          {
+            title: labels.scorePercent,
+            current: result.performanceScore,
+            expected: thresholds.performance,
+            unit: 'score' as const,
+            direction: 'higher' as const,
+          },
+          {
+            title: 'FCP',
+            current: result.firstContentfulPaintMs,
+            expected: thresholds.fcpMs,
+            unit: 'ms' as const,
+            direction: 'lower' as const,
+          },
+          {
+            title: 'LCP',
+            current: result.largestContentfulPaintMs,
+            expected: thresholds.lcpMs,
+            unit: 'ms' as const,
+            direction: 'lower' as const,
+          },
+          {
+            title: labels.payloadLabel,
+            current: result.totalByteWeightKb,
+            expected: thresholds.payloadKb,
+            unit: 'kb' as const,
+            direction: 'lower' as const,
+          },
+        ]
+
+        const summaryWithStatus = summaryMetrics.map((metric) => ({
+          ...metric,
+          status: getMetricStatus(metric.current, metric.expected, metric.direction),
+        }))
+
+        const criticalCount = summaryWithStatus.filter((metric) => metric.status === 'poor').length
+        const warningCount = summaryWithStatus.filter(
+          (metric) => metric.status === 'average',
+        ).length
+
+        const overallState =
+          criticalCount > 0
+            ? { key: 'poor', label: labels.statusCritical }
+            : warningCount > 0
+              ? { key: 'average', label: labels.statusAttention }
+              : { key: 'good', label: labels.statusHealthy }
+
+        const topGaps = summaryWithStatus
+          .filter((metric) => metric.status !== 'good')
+          .map((metric) => ({
+            title: metric.title,
+            gap: formatGap(metric.current, metric.expected, metric.direction, labels),
+          }))
+          .slice(0, 2)
+
         return `
         <section class="card">
           <div class="card-head">
@@ -1143,6 +1329,39 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
             <div class="kpi"><span>FCP</span><b>${result.firstContentfulPaintMs ?? 'N/A'} ms</b></div>
             <div class="kpi"><span>LCP</span><b>${result.largestContentfulPaintMs ?? 'N/A'} ms</b></div>
             <div class="kpi"><span>TTI</span><b>${result.timeToInteractiveMs ?? 'N/A'} ms</b></div>
+          </div>
+          <div class="exec-block">
+            <h3>${labels.executiveSummary}</h3>
+            <div class="exec-head">
+              <span class="state-badge ${overallState.key}">${labels.overallStatus}: ${overallState.label}</span>
+              <span class="muted">${labels.focusFirst}: ${
+                topGaps.length
+                  ? topGaps.map((metric) => `${metric.title} (${metric.gap})`).join(' | ')
+                  : labels.onTarget
+              }</span>
+            </div>
+            <table class="summary-table">
+              <thead>
+                <tr>
+                  <th>${labels.metrics}</th>
+                  <th>${labels.opportunityCurrent}</th>
+                  <th>${labels.targetLabel}</th>
+                  <th>${labels.gapLabel}</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${summaryWithStatus
+                  .map(
+                    (metric) => `<tr>
+                      <td>${metric.title}</td>
+                      <td>${formatMetricValue(metric.current, metric.unit)}</td>
+                      <td>${formatMetricValue(metric.expected, metric.unit)}</td>
+                      <td><span class="op-badge ${metric.status}">${formatGap(metric.current, metric.expected, metric.direction, labels)}</span></td>
+                    </tr>`,
+                  )
+                  .join('')}
+              </tbody>
+            </table>
           </div>
           <div class="quick-list">
             <p><b>${labels.comparisonStatus}:</b> ${comparisonStatus}</p>
@@ -1186,10 +1405,28 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
               ${
                 result.opportunities.length
                   ? result.opportunities
-                      .map(
-                        (item) =>
-                          `<li><b>${item.title}</b> (${item.score ?? 'N/A'}) - ${item.detail}</li>`,
-                      )
+                      .map((item) => {
+                        const statusClass = getOpportunityStatusClass(
+                          item.title,
+                          item.detail,
+                          item.score,
+                        )
+                        const statusLabel =
+                          statusClass === 'good'
+                            ? labels.opportunityGood
+                            : statusClass === 'average'
+                              ? labels.opportunityNeedsWork
+                              : labels.opportunityCritical
+                        const expected = getOpportunityTarget(item.title, lang)
+
+                        return `<li class="opportunity-item">
+                          <div class="opportunity-head">
+                            <b>${item.title}</b>
+                            <span class="op-badge ${statusClass}">${statusLabel}</span>
+                          </div>
+                          <div class="muted">${labels.opportunityStatus}: ${statusLabel} | ${labels.opportunityCurrent}: ${item.detail} | ${labels.opportunityExpected}: ${expected}</div>
+                        </li>`
+                      })
                       .join('')
                   : `<li>${labels.noData}</li>`
               }
@@ -1317,6 +1554,16 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
       .kpi { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; }
       .kpi span { display: block; color: #64748b; font-size: 12px; }
       .kpi b { font-size: 16px; color: #0f172a; }
+      .exec-block { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; margin-bottom: 10px; }
+      .exec-block h3 { margin: 0 0 8px; }
+      .exec-head { display: flex; justify-content: space-between; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+      .state-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+      .state-badge.good { background: #ecfdf3; color: #166534; border: 1px solid #bbf7d0; }
+      .state-badge.average { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+      .state-badge.poor { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+      .summary-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      .summary-table th, .summary-table td { padding: 6px 4px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+      .summary-table th { color: #475569; font-weight: 600; }
       .quick-list { color: #334155; display: grid; gap: 6px; margin-bottom: 6px; }
       .quick-list p { margin: 0; }
       details { margin-top: 8px; border-top: 1px solid #e2e8f0; padding-top: 8px; }
@@ -1330,6 +1577,12 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
       .dot.medium { background: #f59e0b; }
       .dot.low { background: #16a34a; }
       .muted { color: #64748b; font-weight: 600; }
+      .opportunity-item { margin-bottom: 10px; }
+      .opportunity-head { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+      .op-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+      .op-badge.good { background: #ecfdf3; color: #166534; border: 1px solid #bbf7d0; }
+      .op-badge.average { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+      .op-badge.poor { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
       .shot { width: 100%; max-width: 860px; border-radius: 8px; border: 1px solid #e2e8f0; }
       @media (max-width: 960px) { .overview { grid-template-columns: 1fr; } .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .hero-grid { grid-template-columns: 1fr; } }
     </style>
