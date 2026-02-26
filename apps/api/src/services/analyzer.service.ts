@@ -1,7 +1,7 @@
 import { load } from 'cheerio'
 import { launch } from 'chrome-launcher'
 import lighthouse from 'lighthouse'
-import { promises as fs } from 'node:fs'
+import { existsSync, promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
@@ -38,8 +38,32 @@ interface LighthouseAudit {
 const MAX_URLS = 5
 const MAX_REPORT_FILES = 5
 const CURRENT_FILE_DIR = path.dirname(fileURLToPath(import.meta.url))
-const PROJECT_ROOT = path.resolve(CURRENT_FILE_DIR, '../../../../')
-const REPORTS_DIR = path.join(PROJECT_ROOT, 'reports')
+const resolveProjectRoot = (): string => {
+  const candidates = [process.cwd(), path.resolve(CURRENT_FILE_DIR, '../../../../')]
+  const rootPattern = /^[a-zA-Z]:\\$/
+
+  for (const candidate of candidates) {
+    let cursor = path.resolve(candidate)
+
+    while (cursor !== path.dirname(cursor)) {
+      const hasWorkspaceFile = existsSync(path.join(cursor, 'pnpm-workspace.yaml'))
+      const hasGitFolder = existsSync(path.join(cursor, '.git'))
+
+      if (hasWorkspaceFile || hasGitFolder) {
+        return cursor
+      }
+
+      cursor = path.dirname(cursor)
+      if (rootPattern.test(cursor)) break
+    }
+  }
+
+  return path.resolve(process.cwd())
+}
+
+const REPORTS_DIR = process.env.HPA_REPORTS_DIR
+  ? path.resolve(process.env.HPA_REPORTS_DIR)
+  : path.join(resolveProjectRoot(), 'reports')
 const HISTORY_DIR = path.join(REPORTS_DIR, 'history')
 const SETUP_DIR = path.join(REPORTS_DIR, '.setup')
 const K6_SETUP_FILE = path.join(SETUP_DIR, 'k6-bootstrap.json')

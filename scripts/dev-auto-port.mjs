@@ -26,12 +26,13 @@ const findFreePort = async (startPort, exclude = new Set()) => {
 const run = async () => {
   const preferredApiPort = Number(process.env.API_PORT || 3000)
   const preferredWebPort = Number(process.env.WEB_PORT || 5173)
+  const preferredHost = process.env.DEV_HOST || process.env.API_HOST || '127.0.0.1'
   const apiPort = await findFreePort(preferredApiPort)
   const webPort = await findFreePort(preferredWebPort, new Set([apiPort]))
-  const apiTarget = `http://localhost:${apiPort}`
+  const apiTarget = `http://${preferredHost}:${apiPort}`
 
   console.log(`API will run on ${apiTarget}`)
-  console.log(`Web will run on http://localhost:${webPort}`)
+  console.log(`Web will run on http://${preferredHost}:${webPort}`)
 
   const apiProcess = spawn('pnpm', ['--filter', '@hpa/api', 'dev'], {
     stdio: 'inherit',
@@ -39,6 +40,8 @@ const run = async () => {
     env: {
       ...process.env,
       PORT: String(apiPort),
+      API_PORT: String(apiPort),
+      API_HOST: preferredHost,
     },
   })
 
@@ -48,6 +51,8 @@ const run = async () => {
     env: {
       ...process.env,
       WEB_PORT: String(webPort),
+      API_PORT: String(apiPort),
+      API_HOST: preferredHost,
       VITE_API_TARGET: apiTarget,
     },
   })
