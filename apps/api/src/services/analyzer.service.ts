@@ -221,7 +221,11 @@ const runLighthouse = async (
       opportunities,
     }
   } finally {
-    await chrome.kill()
+    try {
+      await chrome.kill()
+    } catch (error) {
+      void error
+    }
   }
 }
 
