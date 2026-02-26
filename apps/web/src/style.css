@@ -1,7 +1,7 @@
 :root {
   font-family: Inter, system-ui, sans-serif;
-  color: #f4f7ff;
-  background: #09061a;
+  color: #0f172a;
+  background: #f8fafc;
 }
 
 * {
@@ -11,10 +11,7 @@
 body {
   margin: 0;
   min-width: 320px;
-  background:
-    radial-gradient(1200px 600px at 10% -10%, rgb(105 66 255 / 30%), transparent 60%),
-    radial-gradient(1000px 500px at 90% -5%, rgb(32 212 255 / 20%), transparent 60%),
-    #09061a;
+  background: #f8fafc;
 }
 
 #app {
@@ -38,54 +35,56 @@ h1 {
 }
 
 .subtitle {
-  color: #b9c1e7;
+  color: #64748b;
   margin-top: 8px;
   margin-bottom: 0;
   line-height: 1.45;
+  max-width: 72ch;
 }
 
 .panel {
-  background: linear-gradient(165deg, rgb(24 19 52 / 90%), rgb(18 15 40 / 88%));
-  border: 1px solid #38327b;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 16px;
   padding: 18px;
   margin-bottom: 16px;
-  box-shadow:
-    0 12px 30px rgb(0 0 0 / 35%),
-    inset 0 1px 0 rgb(255 255 255 / 5%);
-  backdrop-filter: blur(8px);
+  box-shadow: 0 6px 18px rgb(15 23 42 / 6%);
 }
 
 .form {
   display: grid;
   gap: 14px;
+  min-width: 0;
 }
 
 .toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .toolbar-label {
-  color: #cfd6f4;
+  color: #334155;
   font-weight: 600;
   font-size: 0.92rem;
 }
 
 .language-toggle {
   display: inline-flex;
-  background: #0f0d27;
-  border: 1px solid #3d3782;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
   border-radius: 999px;
   padding: 4px;
   gap: 4px;
+  max-width: 100%;
 }
 
 label {
   display: grid;
   gap: 4px;
-  color: #cfd6f4;
+  color: #334155;
   font-weight: 600;
   font-size: 0.9rem;
 }
@@ -95,41 +94,42 @@ label {
   align-items: center;
   gap: 10px;
   font-weight: 600;
-  color: #d7ddfb;
+  color: #334155;
 }
 
 .checkbox-row input[type='checkbox'] {
   width: 16px;
   height: 16px;
-  accent-color: #7f66ff;
+  accent-color: #334155;
 }
 
 input,
 button {
   border-radius: 10px;
-  border: 1px solid #413b8d;
+  border: 1px solid #cbd5e1;
   padding: 10px;
   font-size: 14px;
 }
 
 input {
-  background: #0f0d24;
-  color: #f4f7ff;
+  background: #ffffff;
+  color: #0f172a;
+  width: 100%;
 }
 
 input::placeholder {
-  color: #7f87b4;
+  color: #94a3b8;
 }
 
 input:focus-visible,
 button:focus-visible,
 a:focus-visible {
-  outline: 2px solid #47d7ff;
+  outline: 2px solid #334155;
   outline-offset: 2px;
 }
 
 button {
-  background: linear-gradient(92deg, #7658ff, #a256ff 65%, #cc4dff);
+  background: #0f172a;
   color: #ffffff;
   border: 0;
   cursor: pointer;
@@ -142,12 +142,12 @@ button {
 
 button:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 10px 24px rgb(162 86 255 / 35%);
+  box-shadow: 0 8px 18px rgb(15 23 42 / 20%);
 }
 
 .toggle-btn {
   background: transparent;
-  color: #b7bfdc;
+  color: #64748b;
   border: 0;
   border-radius: 999px;
   padding: 6px 12px;
@@ -158,16 +158,17 @@ button:hover:not(:disabled) {
 .toggle-btn:hover:not(:disabled) {
   box-shadow: none;
   transform: none;
-  color: #e4e9ff;
+  color: #334155;
 }
 
 .toggle-btn.active {
-  background: linear-gradient(90deg, #4dd9ff, #7f66ff);
-  color: #09061a;
+  background: #0f172a;
+  color: #ffffff;
 }
 
 .primary-btn {
   min-height: 42px;
+  width: 100%;
 }
 
 button:disabled {
@@ -176,12 +177,12 @@ button:disabled {
 }
 
 .error {
-  color: #ffc0ca;
+  color: #b91c1c;
   margin: 8px 2px 12px;
 }
 
 .progress-panel {
-  border-color: #5045ce;
+  border-color: #cbd5e1;
 }
 
 .progress-header {
@@ -189,41 +190,42 @@ button:disabled {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
-  color: #ebe9ff;
+  color: #0f172a;
 }
 
 .progress-track {
   width: 100%;
   height: 11px;
-  background: #0f0d26;
-  border: 1px solid #403a8f;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
   border-radius: 999px;
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #15d1ff, #8a5dff, #ff5db1);
+  background: #334155;
   transition: width 240ms ease;
 }
 
 .phase {
   margin: 10px 0 0;
-  color: #cfd2ea;
+  color: #334155;
 }
 
 .phase span {
-  color: #aeb4d9;
+  color: #64748b;
 }
 
 .report {
   margin-top: 16px;
+  min-width: 0;
 }
 
 .report-link {
   display: inline-flex;
   margin: 8px 0 14px;
-  color: #4dd9ff;
+  color: #0f172a;
   font-weight: 600;
   text-decoration: none;
 }
@@ -233,8 +235,8 @@ button:disabled {
 }
 
 .result {
-  background: linear-gradient(160deg, rgb(20 16 45 / 94%), rgb(16 14 35 / 90%));
-  border: 1px solid #342f70;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 12px;
   padding: 18px;
   margin-bottom: 14px;
@@ -243,33 +245,147 @@ button:disabled {
 .result h3 {
   margin-top: 0;
   margin-bottom: 10px;
-  color: #eef2ff;
+  color: #0f172a;
   word-break: break-word;
 }
 
 .result p {
   margin: 8px 0;
-  color: #cfd5f3;
+  color: #334155;
+  overflow-wrap: anywhere;
 }
 
 .result strong {
-  color: #f4f7ff;
+  color: #0f172a;
 }
 
 .result ul {
   margin: 6px 0 12px;
   padding-left: 18px;
-  color: #d7def8;
+  color: #334155;
+  overflow-wrap: anywhere;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 1024px) {
   .container {
-    padding: 20px 14px 28px;
+    padding: 24px 20px 32px;
+  }
+
+  h1 {
+    font-size: 1.95rem;
+  }
+
+  .panel {
+    padding: 16px;
+  }
+
+  .result {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .container {
+    padding: 20px 16px 28px;
+  }
+
+  h1 {
+    font-size: 1.7rem;
+    line-height: 1.2;
+  }
+
+  .subtitle {
+    font-size: 0.95rem;
   }
 
   .toolbar {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
     gap: 8px;
+  }
+
+  .toolbar-label {
+    font-size: 0.88rem;
+  }
+
+  .language-toggle {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .toggle-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    text-align: center;
+  }
+
+  .panel {
+    border-radius: 12px;
+    padding: 14px;
+  }
+
+  .progress-header {
+    font-size: 0.95rem;
+  }
+
+  .phase {
+    font-size: 0.92rem;
+  }
+
+  .report-link {
+    margin-top: 10px;
+  }
+
+  .result {
+    border-radius: 10px;
+    padding: 14px;
+  }
+
+  .result h3 {
+    font-size: 1rem;
+  }
+
+  .result p,
+  .result ul {
+    font-size: 0.94rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .container {
+    padding: 16px 12px 24px;
+  }
+
+  h1 {
+    font-size: 1.45rem;
+  }
+
+  .subtitle {
+    font-size: 0.9rem;
+  }
+
+  .panel {
+    padding: 12px;
+  }
+
+  .checkbox-row {
+    font-size: 0.88rem;
+    align-items: flex-start;
+  }
+
+  input,
+  button {
+    font-size: 13px;
+    padding: 9px;
+  }
+
+  .result {
+    padding: 12px;
+    margin-bottom: 10px;
+  }
+
+  .result p,
+  .result ul {
+    font-size: 0.9rem;
   }
 }

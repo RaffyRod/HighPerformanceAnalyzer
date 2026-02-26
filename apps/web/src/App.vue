@@ -12,7 +12,7 @@ const form = reactive({
   url: '',
   bearerToken: '',
   language: 'es' as 'es' | 'en',
-  includeDiscoveredUrls: true,
+  includeDiscoveredUrls: false,
 })
 
 const loading = ref(false)
