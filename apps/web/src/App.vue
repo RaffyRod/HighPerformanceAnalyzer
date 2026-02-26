@@ -21,10 +21,17 @@ const report = ref<AnalyzeApiResponse | null>(null)
 const progress = ref(0)
 const phaseIndex = ref(0)
 const progressInterval = ref<number | null>(null)
+const progressPhases = ref<readonly string[]>([
+  'phaseDiscovery',
+  'phaseLighthouse',
+  'phaseLoad',
+  'phaseReport',
+])
 
-const phases = ['phaseDiscovery', 'phaseLighthouse', 'phaseLoad', 'phaseReport'] as const
 const currentPhase = computed<string>(
-  () => phases[Math.min(phaseIndex.value, phases.length - 1)] ?? 'phaseDiscovery',
+  () =>
+    progressPhases.value[Math.min(phaseIndex.value, progressPhases.value.length - 1)] ??
+    'phasePrepare',
 )
 
 const stopProgress = (): void => {
@@ -34,7 +41,11 @@ const stopProgress = (): void => {
   }
 }
 
-const startProgress = (): void => {
+const startProgress = (includeDiscoveredUrls: boolean): void => {
+  progressPhases.value = includeDiscoveredUrls
+    ? ['phaseDiscovery', 'phaseLighthouse', 'phaseLoad', 'phaseReport']
+    : ['phasePrepare', 'phaseLighthouse', 'phaseLoad', 'phaseReport']
+
   progress.value = 8
   phaseIndex.value = 0
   stopProgress()
@@ -59,7 +70,7 @@ const runAnalysis = async (): Promise<void> => {
   errorMessage.value = ''
   report.value = null
   locale.value = form.language
-  startProgress()
+  startProgress(form.includeDiscoveredUrls)
 
   try {
     const response = await fetch('/api/analyze', {

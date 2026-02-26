@@ -524,32 +524,38 @@ const evaluateViolations = (
     issues.push(t(lang, 'lowPerformance'))
     suggestions.add(t(lang, 'reduceJs'))
     rootCauses.push({
-      cause: lang === 'es' ? 'Costo alto de render y ejecución' : 'High render and execution cost',
+      cause:
+        lang === 'es'
+          ? 'La página carga demasiado código al inicio'
+          : 'The page loads too much code upfront',
       evidence:
         lang === 'es'
-          ? `Performance score en ${lighthouseResult.performanceScore}.`
-          : `Performance score at ${lighthouseResult.performanceScore}.`,
+          ? `El score de rendimiento fue ${lighthouseResult.performanceScore}.`
+          : `The performance score was ${lighthouseResult.performanceScore}.`,
       impact: 'high',
       possibleFix:
         lang === 'es'
-          ? 'Reducir JS no usado, diferir recursos no críticos y mejorar caché.'
-          : 'Reduce unused JS, defer non-critical resources, and improve caching.',
+          ? 'Carga primero lo esencial y difiere scripts no críticos.'
+          : 'Load only essentials first and defer non-critical scripts.',
     })
   }
   if ((lighthouseResult.firstContentfulPaintMs ?? 0) > 1800) {
     issues.push(t(lang, 'slowFcp'))
     suggestions.add(t(lang, 'cacheAssets'))
     rootCauses.push({
-      cause: lang === 'es' ? 'Primer render lento (FCP)' : 'Slow first render (FCP)',
+      cause:
+        lang === 'es'
+          ? 'El primer contenido tarda en aparecer'
+          : 'The first content appears too late',
       evidence:
         lang === 'es'
-          ? `FCP en ${lighthouseResult.firstContentfulPaintMs} ms (umbral: 1800 ms).`
-          : `FCP at ${lighthouseResult.firstContentfulPaintMs} ms (threshold: 1800 ms).`,
+          ? `FCP: ${lighthouseResult.firstContentfulPaintMs} ms (objetivo: <= 1800 ms).`
+          : `FCP: ${lighthouseResult.firstContentfulPaintMs} ms (target: <= 1800 ms).`,
       impact: 'medium',
       possibleFix:
         lang === 'es'
-          ? 'Priorizar CSS crítico, precargar fuentes y cachear estáticos.'
-          : 'Prioritize critical CSS, preload fonts, and cache static assets.',
+          ? 'Reduce recursos bloqueantes y prioriza CSS crítico.'
+          : 'Reduce render-blocking resources and prioritize critical CSS.',
     })
   }
   if ((lighthouseResult.largestContentfulPaintMs ?? 0) > 2500) {
@@ -558,65 +564,66 @@ const evaluateViolations = (
     rootCauses.push({
       cause:
         lang === 'es'
-          ? 'Elemento principal tarda en cargar (LCP)'
-          : 'Main content element loads too late (LCP)',
+          ? 'El contenido principal tarda en mostrarse'
+          : 'The main content loads too late',
       evidence:
         lang === 'es'
-          ? `LCP en ${lighthouseResult.largestContentfulPaintMs} ms (umbral: 2500 ms).`
-          : `LCP at ${lighthouseResult.largestContentfulPaintMs} ms (threshold: 2500 ms).`,
+          ? `LCP: ${lighthouseResult.largestContentfulPaintMs} ms (objetivo: <= 2500 ms).`
+          : `LCP: ${lighthouseResult.largestContentfulPaintMs} ms (target: <= 2500 ms).`,
       impact: 'high',
       possibleFix:
         lang === 'es'
-          ? 'Optimizar imagen/hero principal, lazy-load selectivo y reducir bloqueo de render.'
-          : 'Optimize hero image/content, use selective lazy-loading, and reduce render blocking.',
+          ? 'Optimiza el hero principal y retrasa recursos secundarios.'
+          : 'Optimize the main hero content and delay secondary resources.',
     })
   }
   if (lighthouseResult.totalByteWeightKb > 2048) {
     issues.push(t(lang, 'heavyPage'))
     suggestions.add(t(lang, 'improveImages'))
     rootCauses.push({
-      cause: lang === 'es' ? 'Peso total de página elevado' : 'Page transfer size is too large',
+      cause: lang === 'es' ? 'La página pesa demasiado' : 'The page payload is too heavy',
       evidence:
         lang === 'es'
-          ? `Transferencia total en ${lighthouseResult.totalByteWeightKb} KB (umbral: 2048 KB).`
-          : `Total transfer at ${lighthouseResult.totalByteWeightKb} KB (threshold: 2048 KB).`,
+          ? `Peso transferido: ${lighthouseResult.totalByteWeightKb} KB (objetivo: <= 2048 KB).`
+          : `Transferred size: ${lighthouseResult.totalByteWeightKb} KB (target: <= 2048 KB).`,
       impact: 'high',
       possibleFix:
         lang === 'es'
-          ? 'Comprimir imágenes/video, eliminar payload innecesario y activar compresión HTTP.'
-          : 'Compress images/media, remove unnecessary payload, and enable HTTP compression.',
+          ? 'Comprime imágenes y elimina archivos que no aportan valor.'
+          : 'Compress images and remove files that do not add value.',
     })
   }
   if (typeof avg === 'number' && avg > 800) {
     issues.push(t(lang, 'slowCalls'))
     suggestions.add(t(lang, 'optimizeBackend'))
     rootCauses.push({
-      cause: lang === 'es' ? 'Latencia de API elevada' : 'High API latency',
+      cause: lang === 'es' ? 'El servidor responde lento' : 'The server responds too slowly',
       evidence:
         lang === 'es'
-          ? `Duración promedio de requests en ${avg.toFixed(2)} ms (umbral: 800 ms).`
-          : `Average request duration at ${avg.toFixed(2)} ms (threshold: 800 ms).`,
+          ? `Tiempo promedio de respuesta: ${avg.toFixed(2)} ms (objetivo: <= 800 ms).`
+          : `Average response time: ${avg.toFixed(2)} ms (target: <= 800 ms).`,
       impact: 'medium',
       possibleFix:
         lang === 'es'
-          ? 'Optimizar queries, agregar caché y revisar dependencias lentas de backend.'
-          : 'Optimize queries, add caching, and review slow backend dependencies.',
+          ? 'Optimiza consultas, agrega caché y revisa endpoints lentos.'
+          : 'Optimize queries, add caching, and review slow endpoints.',
     })
   }
   if (typeof failRate === 'number' && failRate > 0.01) {
     issues.push(t(lang, 'highFailureRate'))
     suggestions.add(t(lang, 'optimizeBackend'))
     rootCauses.push({
-      cause: lang === 'es' ? 'Tasa de error alta en llamadas' : 'High request error rate',
+      cause:
+        lang === 'es' ? 'Demasiadas solicitudes están fallando' : 'Too many requests are failing',
       evidence:
         lang === 'es'
-          ? `Fallas en ${(failRate * 100).toFixed(2)}% de requests (umbral: 1%).`
-          : `Failures in ${(failRate * 100).toFixed(2)}% of requests (threshold: 1%).`,
+          ? `Error rate: ${(failRate * 100).toFixed(2)}% (objetivo: <= 1%).`
+          : `Error rate: ${(failRate * 100).toFixed(2)}% (target: <= 1%).`,
       impact: 'high',
       possibleFix:
         lang === 'es'
-          ? 'Analizar status codes, timeouts y retries para aislar endpoints inestables.'
-          : 'Inspect status codes, timeouts, and retries to isolate unstable endpoints.',
+          ? 'Revisa códigos de error, timeouts y endpoints inestables.'
+          : 'Review status codes, timeouts, and unstable endpoints.',
     })
   }
 
@@ -761,6 +768,11 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
           pageBreakdown: 'Detalle por página',
           details: 'Detalles',
           analyzedAt: 'Analizado en',
+          whyItMatters: 'Por que importa',
+          whatToDo: 'Que hacer',
+          impactHigh: 'Alta',
+          impactMedium: 'Media',
+          impactLow: 'Baja',
         }
       : {
           title: 'High Performance Analyzer - Lighthouse++',
@@ -786,6 +798,11 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
           pageBreakdown: 'Per-page breakdown',
           details: 'Details',
           analyzedAt: 'Analyzed at',
+          whyItMatters: 'Why it matters',
+          whatToDo: 'What to do',
+          impactHigh: 'High',
+          impactMedium: 'Medium',
+          impactLow: 'Low',
         }
 
   const averageScore = payload.results.length
@@ -849,10 +866,16 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
             ${
               result.rootCauses.length
                 ? result.rootCauses
-                    .map(
-                      (item) =>
-                        `<li><b>${item.cause}</b> (${labels.priority}: ${item.impact})<br />${item.evidence}<br /><b>${labels.possibleFix}:</b> ${item.possibleFix}</li>`,
-                    )
+                    .map((item) => {
+                      const impactLabel =
+                        item.impact === 'high'
+                          ? labels.impactHigh
+                          : item.impact === 'medium'
+                            ? labels.impactMedium
+                            : labels.impactLow
+
+                      return `<li><b>${item.cause}</b> (${labels.priority}: ${impactLabel})<br /><span class="muted">${labels.whyItMatters}:</span> ${item.evidence}<br /><span class="muted">${labels.whatToDo}:</span> ${item.possibleFix}</li>`
+                    })
                     .join('')
                 : `<li>${labels.noData}</li>`
             }
@@ -889,37 +912,38 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Performance Report</title>
     <style>
-      body { font-family: Inter, Arial, sans-serif; margin: 24px; background: #0f172a; color: #e2e8f0; line-height: 1.45; }
-      h1 { margin-bottom: 4px; }
-      h2 { margin: 0; font-size: 18px; word-break: break-word; }
-      h3 { margin-bottom: 8px; margin-top: 16px; font-size: 14px; color: #dbe7ff; }
-      .meta { color: #9eb2d7; margin-bottom: 14px; }
-      .hero { background: #111c35; border: 1px solid #1f2f53; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+      body { font-family: Inter, Arial, sans-serif; margin: 24px; background: #f8fafc; color: #0f172a; line-height: 1.5; }
+      h1 { margin-bottom: 4px; color: #0f172a; }
+      h2 { margin: 0; font-size: 18px; word-break: break-word; color: #0f172a; }
+      h3 { margin-bottom: 8px; margin-top: 16px; font-size: 14px; color: #334155; }
+      .meta { color: #475569; margin-bottom: 14px; }
+      .hero { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
       .hero-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-      .hero-item { background: #0f1830; border: 1px solid #253c68; border-radius: 10px; padding: 10px; }
-      .hero-item span { color: #9bb6e8; display: block; font-size: 12px; }
-      .hero-item b { font-size: 20px; }
-      .actions { margin-top: 12px; background: #0f1830; border: 1px solid #253c68; border-radius: 10px; padding: 10px 12px; }
+      .hero-item { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; }
+      .hero-item span { color: #64748b; display: block; font-size: 12px; }
+      .hero-item b { font-size: 20px; color: #0f172a; }
+      .actions { margin-top: 12px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; }
       .actions h3 { margin-top: 0; }
       .actions ol { margin: 6px 0 0 20px; padding: 0; }
-      .card { background: #19253c; border-radius: 12px; padding: 14px; margin-bottom: 12px; border: 1px solid #2d446f; }
+      .card { background: #ffffff; border-radius: 12px; padding: 14px; margin-bottom: 12px; border: 1px solid #e2e8f0; }
       .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
-      .status { display: inline-block; padding: 3px 8px; border-radius: 999px; font-weight: 600; }
-      .status.improved { background: #163126; color: #a6ebc8; border: 1px solid #2d6a4f; }
-      .status.regressed { background: #3a1520; color: #ffb6c4; border: 1px solid #6d2638; }
-      .status.stable { background: #1b2941; color: #bfd3fb; border: 1px solid #365890; }
-      .status.new { background: #312311; color: #ffe3ae; border: 1px solid #705324; }
+      .status { display: inline-block; padding: 3px 8px; border-radius: 999px; font-weight: 600; font-size: 12px; }
+      .status.improved { background: #ecfdf3; color: #166534; border: 1px solid #bbf7d0; }
+      .status.regressed { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+      .status.stable { background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
+      .status.new { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
       .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
-      .kpi { background: #0f172a; border: 1px solid #2d446f; border-radius: 8px; padding: 8px; }
-      .kpi span { display: block; color: #9bb0d8; font-size: 12px; }
-      .kpi b { font-size: 16px; }
-      .quick-list { color: #bdd0f5; display: grid; gap: 6px; margin-bottom: 6px; }
+      .kpi { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; }
+      .kpi span { display: block; color: #64748b; font-size: 12px; }
+      .kpi b { font-size: 16px; color: #0f172a; }
+      .quick-list { color: #334155; display: grid; gap: 6px; margin-bottom: 6px; }
       .quick-list p { margin: 0; }
-      details { margin-top: 8px; }
-      summary { cursor: pointer; color: #7fc8ff; font-weight: 600; }
+      details { margin-top: 8px; border-top: 1px solid #e2e8f0; padding-top: 8px; }
+      summary { cursor: pointer; color: #334155; font-weight: 600; }
       ul { padding-left: 18px; }
       li { margin-bottom: 8px; }
-      .shot { width: 100%; max-width: 860px; border-radius: 8px; border: 1px solid #2d446f; }
+      .muted { color: #64748b; font-weight: 600; }
+      .shot { width: 100%; max-width: 860px; border-radius: 8px; border: 1px solid #e2e8f0; }
       @media (max-width: 960px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .hero-grid { grid-template-columns: 1fr; } }
     </style>
   </head>
