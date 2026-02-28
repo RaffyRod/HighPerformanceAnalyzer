@@ -42,6 +42,64 @@ h1 {
   max-width: 72ch;
 }
 
+.api-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 8px 12px;
+  margin-bottom: 14px;
+  font-size: 0.9rem;
+  color: #334155;
+}
+
+.api-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #94a3b8;
+}
+
+.api-status-label {
+  color: #64748b;
+}
+
+.api-status-last-check {
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+.api-status-retry {
+  margin-left: 6px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.api-status-retry:hover:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+  border-color: #94a3b8;
+}
+
+.api-status.checking .api-status-dot {
+  background: #f59e0b;
+}
+
+.api-status.online .api-status-dot {
+  background: #22c55e;
+}
+
+.api-status.offline .api-status-dot {
+  background: #ef4444;
+}
+
 .panel {
   background: #ffffff;
   border: 1px solid #e2e8f0;

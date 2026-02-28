@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { AnalyzeApiResponse } from './types/api'
 import AnalysisForm from './components/AnalysisForm.vue'
@@ -18,6 +18,12 @@ const form = reactive({
 const loading = ref(false)
 const errorMessage = ref('')
 const report = ref<AnalyzeApiResponse | null>(null)
+const apiReachable = ref<boolean | null>(null)
+const apiHealthChecking = ref(false)
+const apiHealthInterval = ref<number | null>(null)
+const lastApiCheckAt = ref<Date | null>(null)
+const apiLastCheckClock = ref(Date.now())
+const apiLastCheckClockInterval = ref<number | null>(null)
 const progress = ref(0)
 const phaseIndex = ref(0)
 const progressInterval = ref<number | null>(null)
@@ -33,6 +39,67 @@ const currentPhase = computed<string>(
     progressPhases.value[Math.min(phaseIndex.value, progressPhases.value.length - 1)] ??
     'phasePrepare',
 )
+
+const apiStatusText = computed<string>(() => {
+  if (apiHealthChecking.value && apiReachable.value === null) return t('apiStatusChecking')
+  if (apiReachable.value === true) return t('apiStatusOnline')
+  return t('apiStatusOffline')
+})
+
+const apiStatusClass = computed<string>(() => {
+  if (apiHealthChecking.value && apiReachable.value === null) return 'checking'
+  return apiReachable.value ? 'online' : 'offline'
+})
+
+const apiLastCheckText = computed<string>(() => {
+  if (!lastApiCheckAt.value) return t('apiStatusLastCheckNone')
+
+  const elapsedSeconds = Math.max(
+    0,
+    Math.floor((apiLastCheckClock.value - lastApiCheckAt.value.getTime()) / 1000),
+  )
+
+  if (elapsedSeconds < 5) return t('apiStatusCheckedNow')
+  if (elapsedSeconds < 60) return t('apiStatusCheckedSecondsAgo', { count: elapsedSeconds })
+
+  const elapsedMinutes = Math.floor(elapsedSeconds / 60)
+  if (elapsedMinutes < 60) return t('apiStatusCheckedMinutesAgo', { count: elapsedMinutes })
+
+  const elapsedHours = Math.floor(elapsedMinutes / 60)
+  if (elapsedHours < 24) return t('apiStatusCheckedHoursAgo', { count: elapsedHours })
+
+  return lastApiCheckAt.value.toLocaleString([], {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  })
+})
+
+const checkApiHealth = async (): Promise<boolean> => {
+  apiHealthChecking.value = true
+  try {
+    const response = await fetch('/api/health', {
+      signal: AbortSignal.timeout(4000),
+    })
+    const ok = response.ok
+    apiReachable.value = ok
+    return ok
+  } catch {
+    apiReachable.value = false
+    return false
+  } finally {
+    lastApiCheckAt.value = new Date()
+    apiHealthChecking.value = false
+  }
+}
+
+const retryApiHealth = async (): Promise<void> => {
+  await checkApiHealth()
+}
 
 const stopProgress = (): void => {
   if (progressInterval.value !== null) {
@@ -66,6 +133,12 @@ const setLanguage = (language: 'es' | 'en'): void => {
 }
 
 const runAnalysis = async (): Promise<void> => {
+  const apiOk = await checkApiHealth()
+  if (!apiOk) {
+    errorMessage.value = t('networkError')
+    return
+  }
+
   loading.value = true
   errorMessage.value = ''
   report.value = null
@@ -85,21 +158,59 @@ const runAnalysis = async (): Promise<void> => {
     })
 
     if (!response.ok) {
-      const failurePayload = (await response.json().catch(() => null)) as {
-        message?: string
-      } | null
-      throw new Error(failurePayload?.message || t('error'))
+      const contentType = response.headers.get('content-type') ?? ''
+      let failureMessage = ''
+
+      if (contentType.includes('application/json')) {
+        const failurePayload = (await response.json().catch(() => null)) as {
+          message?: string
+        } | null
+        failureMessage = failurePayload?.message?.trim() ?? ''
+      } else {
+        const failureText = (await response.text().catch(() => '')).trim()
+        if (failureText) {
+          failureMessage = failureText.slice(0, 240)
+        }
+      }
+
+      const statusInfo = `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`
+      throw new Error(failureMessage || `${t('error')} (${statusInfo})`)
     }
 
     report.value = (await response.json()) as AnalyzeApiResponse
     progress.value = 100
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : t('error')
+    if (error instanceof TypeError && error.message.toLowerCase().includes('fetch')) {
+      errorMessage.value = t('networkError')
+    } else {
+      errorMessage.value = error instanceof Error ? error.message : t('error')
+    }
   } finally {
     stopProgress()
     loading.value = false
   }
 }
+
+onMounted(() => {
+  void checkApiHealth()
+  apiHealthInterval.value = window.setInterval(() => {
+    void checkApiHealth()
+  }, 15000)
+  apiLastCheckClockInterval.value = window.setInterval(() => {
+    apiLastCheckClock.value = Date.now()
+  }, 1000)
+})
+
+onUnmounted(() => {
+  if (apiHealthInterval.value !== null) {
+    window.clearInterval(apiHealthInterval.value)
+    apiHealthInterval.value = null
+  }
+  if (apiLastCheckClockInterval.value !== null) {
+    window.clearInterval(apiLastCheckClockInterval.value)
+    apiLastCheckClockInterval.value = null
+  }
+})
 </script>
 
 <template>
@@ -107,6 +218,23 @@ const runAnalysis = async (): Promise<void> => {
     <section class="hero">
       <h1>{{ t('title') }}</h1>
       <p class="subtitle">{{ t('subtitle') }}</p>
+    </section>
+
+    <section class="api-status" :class="apiStatusClass" role="status" aria-live="polite">
+      <span class="api-status-dot" aria-hidden="true"></span>
+      <span class="api-status-label">{{ t('apiStatusLabel') }}:</span>
+      <strong>{{ apiStatusText }}</strong>
+      <span class="api-status-last-check"
+        >{{ t('apiStatusLastCheckLabel') }}: {{ apiLastCheckText }}</span
+      >
+      <button
+        type="button"
+        class="api-status-retry"
+        :disabled="apiHealthChecking"
+        @click="retryApiHealth"
+      >
+        {{ t('apiStatusRetry') }}
+      </button>
     </section>
 
     <AnalysisForm
