@@ -557,136 +557,150 @@ const evaluateViolations = (
   const pageWeightThresholdKb = 2048
   const avgCallThresholdMs = 800
   const failureRateThresholdPercent = 1
+  type TranslationKey = Parameters<typeof t>[1]
+  const localize = (es: string, en: string): string => (lang === 'es' ? es : en)
+  const rules: Array<{
+    triggered: boolean
+    issue: string
+    suggestionKey: TranslationKey
+    rootCause: UrlInsights['rootCauses'][number]
+  }> = [
+    {
+      triggered: lighthouseResult.performanceScore < performanceThreshold,
+      issue: localize(
+        `Performance score bajo: actual ${lighthouseResult.performanceScore}, esperado >= ${performanceThreshold}.`,
+        `Low performance score: current ${lighthouseResult.performanceScore}, expected >= ${performanceThreshold}.`,
+      ),
+      suggestionKey: 'reduceJs',
+      rootCause: {
+        cause: localize(
+          'La página carga demasiado código al inicio',
+          'The page loads too much code upfront',
+        ),
+        evidence: localize(
+          `El score de rendimiento fue ${lighthouseResult.performanceScore}.`,
+          `The performance score was ${lighthouseResult.performanceScore}.`,
+        ),
+        impact: 'high',
+        possibleFix: localize(
+          'Carga primero lo esencial y difiere scripts no críticos.',
+          'Load only essentials first and defer non-critical scripts.',
+        ),
+      },
+    },
+    {
+      triggered: (lighthouseResult.firstContentfulPaintMs ?? 0) > fcpThresholdMs,
+      issue: localize(
+        `FCP lento: actual ${lighthouseResult.firstContentfulPaintMs ?? 'N/A'} ms, esperado <= ${fcpThresholdMs} ms.`,
+        `Slow FCP: current ${lighthouseResult.firstContentfulPaintMs ?? 'N/A'} ms, expected <= ${fcpThresholdMs} ms.`,
+      ),
+      suggestionKey: 'cacheAssets',
+      rootCause: {
+        cause: localize(
+          'El primer contenido tarda en aparecer',
+          'The first content appears too late',
+        ),
+        evidence: localize(
+          `FCP: ${lighthouseResult.firstContentfulPaintMs} ms (objetivo: <= 1800 ms).`,
+          `FCP: ${lighthouseResult.firstContentfulPaintMs} ms (target: <= 1800 ms).`,
+        ),
+        impact: 'medium',
+        possibleFix: localize(
+          'Reduce recursos bloqueantes y prioriza CSS crítico.',
+          'Reduce render-blocking resources and prioritize critical CSS.',
+        ),
+      },
+    },
+    {
+      triggered: (lighthouseResult.largestContentfulPaintMs ?? 0) > lcpThresholdMs,
+      issue: localize(
+        `LCP lento: actual ${lighthouseResult.largestContentfulPaintMs ?? 'N/A'} ms, esperado <= ${lcpThresholdMs} ms.`,
+        `Slow LCP: current ${lighthouseResult.largestContentfulPaintMs ?? 'N/A'} ms, expected <= ${lcpThresholdMs} ms.`,
+      ),
+      suggestionKey: 'improveImages',
+      rootCause: {
+        cause: localize(
+          'El contenido principal tarda en mostrarse',
+          'The main content loads too late',
+        ),
+        evidence: localize(
+          `LCP: ${lighthouseResult.largestContentfulPaintMs} ms (objetivo: <= 2500 ms).`,
+          `LCP: ${lighthouseResult.largestContentfulPaintMs} ms (target: <= 2500 ms).`,
+        ),
+        impact: 'high',
+        possibleFix: localize(
+          'Optimiza el hero principal y retrasa recursos secundarios.',
+          'Optimize the main hero content and delay secondary resources.',
+        ),
+      },
+    },
+    {
+      triggered: lighthouseResult.totalByteWeightKb > pageWeightThresholdKb,
+      issue: localize(
+        `Página pesada: actual ${lighthouseResult.totalByteWeightKb} KB, esperado <= ${pageWeightThresholdKb} KB.`,
+        `Heavy page payload: current ${lighthouseResult.totalByteWeightKb} KB, expected <= ${pageWeightThresholdKb} KB.`,
+      ),
+      suggestionKey: 'improveImages',
+      rootCause: {
+        cause: localize('La página pesa demasiado', 'The page payload is too heavy'),
+        evidence: localize(
+          `Peso transferido: ${lighthouseResult.totalByteWeightKb} KB (objetivo: <= 2048 KB).`,
+          `Transferred size: ${lighthouseResult.totalByteWeightKb} KB (target: <= 2048 KB).`,
+        ),
+        impact: 'high',
+        possibleFix: localize(
+          'Comprime imágenes y elimina archivos que no aportan valor.',
+          'Compress images and remove files that do not add value.',
+        ),
+      },
+    },
+    {
+      triggered: typeof avg === 'number' && avg > avgCallThresholdMs,
+      issue: localize(
+        `Llamadas API lentas: promedio actual ${avg?.toFixed(2)} ms, esperado <= ${avgCallThresholdMs} ms.`,
+        `Slow API calls: current average ${avg?.toFixed(2)} ms, expected <= ${avgCallThresholdMs} ms.`,
+      ),
+      suggestionKey: 'optimizeBackend',
+      rootCause: {
+        cause: localize('El servidor responde lento', 'The server responds too slowly'),
+        evidence: localize(
+          `Tiempo promedio de respuesta: ${avg?.toFixed(2)} ms (objetivo: <= 800 ms).`,
+          `Average response time: ${avg?.toFixed(2)} ms (target: <= 800 ms).`,
+        ),
+        impact: 'medium',
+        possibleFix: localize(
+          'Optimiza consultas, agrega caché y revisa endpoints lentos.',
+          'Optimize queries, add caching, and review slow endpoints.',
+        ),
+      },
+    },
+    {
+      triggered: typeof failRate === 'number' && failRate > 0.01,
+      issue: localize(
+        `Tasa de error alta: actual ${((failRate ?? 0) * 100).toFixed(2)}%, esperado <= ${failureRateThresholdPercent}%.`,
+        `High error rate: current ${((failRate ?? 0) * 100).toFixed(2)}%, expected <= ${failureRateThresholdPercent}%.`,
+      ),
+      suggestionKey: 'optimizeBackend',
+      rootCause: {
+        cause: localize('Demasiadas solicitudes están fallando', 'Too many requests are failing'),
+        evidence: localize(
+          `Error rate: ${((failRate ?? 0) * 100).toFixed(2)}% (objetivo: <= 1%).`,
+          `Error rate: ${((failRate ?? 0) * 100).toFixed(2)}% (target: <= 1%).`,
+        ),
+        impact: 'high',
+        possibleFix: localize(
+          'Revisa códigos de error, timeouts y endpoints inestables.',
+          'Review status codes, timeouts, and unstable endpoints.',
+        ),
+      },
+    },
+  ]
 
-  if (lighthouseResult.performanceScore < performanceThreshold) {
-    issues.push(
-      lang === 'es'
-        ? `Performance score bajo: actual ${lighthouseResult.performanceScore}, esperado >= ${performanceThreshold}.`
-        : `Low performance score: current ${lighthouseResult.performanceScore}, expected >= ${performanceThreshold}.`,
-    )
-    suggestions.add(t(lang, 'reduceJs'))
-    rootCauses.push({
-      cause:
-        lang === 'es'
-          ? 'La página carga demasiado código al inicio'
-          : 'The page loads too much code upfront',
-      evidence:
-        lang === 'es'
-          ? `El score de rendimiento fue ${lighthouseResult.performanceScore}.`
-          : `The performance score was ${lighthouseResult.performanceScore}.`,
-      impact: 'high',
-      possibleFix:
-        lang === 'es'
-          ? 'Carga primero lo esencial y difiere scripts no críticos.'
-          : 'Load only essentials first and defer non-critical scripts.',
-    })
-  }
-  if ((lighthouseResult.firstContentfulPaintMs ?? 0) > fcpThresholdMs) {
-    issues.push(
-      lang === 'es'
-        ? `FCP lento: actual ${lighthouseResult.firstContentfulPaintMs ?? 'N/A'} ms, esperado <= ${fcpThresholdMs} ms.`
-        : `Slow FCP: current ${lighthouseResult.firstContentfulPaintMs ?? 'N/A'} ms, expected <= ${fcpThresholdMs} ms.`,
-    )
-    suggestions.add(t(lang, 'cacheAssets'))
-    rootCauses.push({
-      cause:
-        lang === 'es'
-          ? 'El primer contenido tarda en aparecer'
-          : 'The first content appears too late',
-      evidence:
-        lang === 'es'
-          ? `FCP: ${lighthouseResult.firstContentfulPaintMs} ms (objetivo: <= 1800 ms).`
-          : `FCP: ${lighthouseResult.firstContentfulPaintMs} ms (target: <= 1800 ms).`,
-      impact: 'medium',
-      possibleFix:
-        lang === 'es'
-          ? 'Reduce recursos bloqueantes y prioriza CSS crítico.'
-          : 'Reduce render-blocking resources and prioritize critical CSS.',
-    })
-  }
-  if ((lighthouseResult.largestContentfulPaintMs ?? 0) > lcpThresholdMs) {
-    issues.push(
-      lang === 'es'
-        ? `LCP lento: actual ${lighthouseResult.largestContentfulPaintMs ?? 'N/A'} ms, esperado <= ${lcpThresholdMs} ms.`
-        : `Slow LCP: current ${lighthouseResult.largestContentfulPaintMs ?? 'N/A'} ms, expected <= ${lcpThresholdMs} ms.`,
-    )
-    suggestions.add(t(lang, 'improveImages'))
-    rootCauses.push({
-      cause:
-        lang === 'es'
-          ? 'El contenido principal tarda en mostrarse'
-          : 'The main content loads too late',
-      evidence:
-        lang === 'es'
-          ? `LCP: ${lighthouseResult.largestContentfulPaintMs} ms (objetivo: <= 2500 ms).`
-          : `LCP: ${lighthouseResult.largestContentfulPaintMs} ms (target: <= 2500 ms).`,
-      impact: 'high',
-      possibleFix:
-        lang === 'es'
-          ? 'Optimiza el hero principal y retrasa recursos secundarios.'
-          : 'Optimize the main hero content and delay secondary resources.',
-    })
-  }
-  if (lighthouseResult.totalByteWeightKb > pageWeightThresholdKb) {
-    issues.push(
-      lang === 'es'
-        ? `Página pesada: actual ${lighthouseResult.totalByteWeightKb} KB, esperado <= ${pageWeightThresholdKb} KB.`
-        : `Heavy page payload: current ${lighthouseResult.totalByteWeightKb} KB, expected <= ${pageWeightThresholdKb} KB.`,
-    )
-    suggestions.add(t(lang, 'improveImages'))
-    rootCauses.push({
-      cause: lang === 'es' ? 'La página pesa demasiado' : 'The page payload is too heavy',
-      evidence:
-        lang === 'es'
-          ? `Peso transferido: ${lighthouseResult.totalByteWeightKb} KB (objetivo: <= 2048 KB).`
-          : `Transferred size: ${lighthouseResult.totalByteWeightKb} KB (target: <= 2048 KB).`,
-      impact: 'high',
-      possibleFix:
-        lang === 'es'
-          ? 'Comprime imágenes y elimina archivos que no aportan valor.'
-          : 'Compress images and remove files that do not add value.',
-    })
-  }
-  if (typeof avg === 'number' && avg > avgCallThresholdMs) {
-    issues.push(
-      lang === 'es'
-        ? `Llamadas API lentas: promedio actual ${avg.toFixed(2)} ms, esperado <= ${avgCallThresholdMs} ms.`
-        : `Slow API calls: current average ${avg.toFixed(2)} ms, expected <= ${avgCallThresholdMs} ms.`,
-    )
-    suggestions.add(t(lang, 'optimizeBackend'))
-    rootCauses.push({
-      cause: lang === 'es' ? 'El servidor responde lento' : 'The server responds too slowly',
-      evidence:
-        lang === 'es'
-          ? `Tiempo promedio de respuesta: ${avg.toFixed(2)} ms (objetivo: <= 800 ms).`
-          : `Average response time: ${avg.toFixed(2)} ms (target: <= 800 ms).`,
-      impact: 'medium',
-      possibleFix:
-        lang === 'es'
-          ? 'Optimiza consultas, agrega caché y revisa endpoints lentos.'
-          : 'Optimize queries, add caching, and review slow endpoints.',
-    })
-  }
-  if (typeof failRate === 'number' && failRate > 0.01) {
-    issues.push(
-      lang === 'es'
-        ? `Tasa de error alta: actual ${(failRate * 100).toFixed(2)}%, esperado <= ${failureRateThresholdPercent}%.`
-        : `High error rate: current ${(failRate * 100).toFixed(2)}%, expected <= ${failureRateThresholdPercent}%.`,
-    )
-    suggestions.add(t(lang, 'optimizeBackend'))
-    rootCauses.push({
-      cause:
-        lang === 'es' ? 'Demasiadas solicitudes están fallando' : 'Too many requests are failing',
-      evidence:
-        lang === 'es'
-          ? `Error rate: ${(failRate * 100).toFixed(2)}% (objetivo: <= 1%).`
-          : `Error rate: ${(failRate * 100).toFixed(2)}% (target: <= 1%).`,
-      impact: 'high',
-      possibleFix:
-        lang === 'es'
-          ? 'Revisa códigos de error, timeouts y endpoints inestables.'
-          : 'Review status codes, timeouts, and unstable endpoints.',
-    })
+  for (const rule of rules) {
+    if (!rule.triggered) continue
+    issues.push(rule.issue)
+    suggestions.add(t(lang, rule.suggestionKey))
+    rootCauses.push(rule.rootCause)
   }
 
   for (const lhSuggestion of lighthouseResult.lighthouseSuggestions) {
@@ -999,148 +1013,151 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
   } => {
     const actions = new Set<string>()
     const rootCauses: UrlInsights['rootCauses'] = []
-    let issueCount = 0
-
-    if (result.performanceScore < thresholds.performance) {
-      issueCount += 1
-      actions.add(
-        lang === 'es'
-          ? 'Carga primero lo esencial y difiere scripts no criticos.'
-          : 'Load only essentials first and defer non-critical scripts.',
-      )
-      rootCauses.push({
-        cause:
-          lang === 'es'
-            ? 'La pagina carga demasiado codigo al inicio'
-            : 'The page loads too much code upfront',
-        evidence:
-          lang === 'es'
-            ? `Performance score bajo: actual ${result.performanceScore}, esperado >= ${thresholds.performance}.`
-            : `Low performance score: current ${result.performanceScore}, expected >= ${thresholds.performance}.`,
+    const rules: Array<{
+      triggered: boolean
+      action: { es: string; en: string }
+      cause: { es: string; en: string }
+      evidence: { es: string; en: string }
+      impact: UrlInsights['rootCauses'][number]['impact']
+      possibleFix: { es: string; en: string }
+    }> = [
+      {
+        triggered: result.performanceScore < thresholds.performance,
+        action: {
+          es: 'Carga primero lo esencial y difiere scripts no criticos.',
+          en: 'Load only essentials first and defer non-critical scripts.',
+        },
+        cause: {
+          es: 'La pagina carga demasiado codigo al inicio',
+          en: 'The page loads too much code upfront',
+        },
+        evidence: {
+          es: `Performance score bajo: actual ${result.performanceScore}, esperado >= ${thresholds.performance}.`,
+          en: `Low performance score: current ${result.performanceScore}, expected >= ${thresholds.performance}.`,
+        },
         impact: 'high',
-        possibleFix:
-          lang === 'es'
-            ? 'Prioriza recursos criticos y retrasa codigo secundario.'
-            : 'Prioritize critical resources and delay secondary code.',
-      })
-    }
-
-    if ((result.firstContentfulPaintMs ?? 0) > thresholds.fcpMs) {
-      issueCount += 1
-      actions.add(
-        lang === 'es'
-          ? 'Reduce recursos bloqueantes y prioriza CSS critico.'
-          : 'Reduce render-blocking resources and prioritize critical CSS.',
-      )
-      rootCauses.push({
-        cause:
-          lang === 'es'
-            ? 'El primer contenido tarda en aparecer'
-            : 'The first content appears too late',
-        evidence:
-          lang === 'es'
-            ? `FCP lento: actual ${result.firstContentfulPaintMs ?? 'N/A'} ms, esperado <= ${thresholds.fcpMs} ms.`
-            : `Slow FCP: current ${result.firstContentfulPaintMs ?? 'N/A'} ms, expected <= ${thresholds.fcpMs} ms.`,
+        possibleFix: {
+          es: 'Prioriza recursos criticos y retrasa codigo secundario.',
+          en: 'Prioritize critical resources and delay secondary code.',
+        },
+      },
+      {
+        triggered: (result.firstContentfulPaintMs ?? 0) > thresholds.fcpMs,
+        action: {
+          es: 'Reduce recursos bloqueantes y prioriza CSS critico.',
+          en: 'Reduce render-blocking resources and prioritize critical CSS.',
+        },
+        cause: {
+          es: 'El primer contenido tarda en aparecer',
+          en: 'The first content appears too late',
+        },
+        evidence: {
+          es: `FCP lento: actual ${result.firstContentfulPaintMs ?? 'N/A'} ms, esperado <= ${thresholds.fcpMs} ms.`,
+          en: `Slow FCP: current ${result.firstContentfulPaintMs ?? 'N/A'} ms, expected <= ${thresholds.fcpMs} ms.`,
+        },
         impact: 'medium',
-        possibleFix:
-          lang === 'es'
-            ? 'Optimiza CSS/fuentes iniciales para mostrar contenido antes.'
-            : 'Optimize initial CSS/fonts to show content sooner.',
-      })
-    }
-
-    if ((result.largestContentfulPaintMs ?? 0) > thresholds.lcpMs) {
-      issueCount += 1
-      actions.add(
-        lang === 'es'
-          ? 'Optimiza el hero principal y retrasa recursos secundarios.'
-          : 'Optimize the main hero content and delay secondary resources.',
-      )
-      rootCauses.push({
-        cause:
-          lang === 'es'
-            ? 'El contenido principal tarda en mostrarse'
-            : 'The main content loads too late',
-        evidence:
-          lang === 'es'
-            ? `LCP lento: actual ${result.largestContentfulPaintMs ?? 'N/A'} ms, esperado <= ${thresholds.lcpMs} ms.`
-            : `Slow LCP: current ${result.largestContentfulPaintMs ?? 'N/A'} ms, expected <= ${thresholds.lcpMs} ms.`,
+        possibleFix: {
+          es: 'Optimiza CSS/fuentes iniciales para mostrar contenido antes.',
+          en: 'Optimize initial CSS/fonts to show content sooner.',
+        },
+      },
+      {
+        triggered: (result.largestContentfulPaintMs ?? 0) > thresholds.lcpMs,
+        action: {
+          es: 'Optimiza el hero principal y retrasa recursos secundarios.',
+          en: 'Optimize the main hero content and delay secondary resources.',
+        },
+        cause: {
+          es: 'El contenido principal tarda en mostrarse',
+          en: 'The main content loads too late',
+        },
+        evidence: {
+          es: `LCP lento: actual ${result.largestContentfulPaintMs ?? 'N/A'} ms, esperado <= ${thresholds.lcpMs} ms.`,
+          en: `Slow LCP: current ${result.largestContentfulPaintMs ?? 'N/A'} ms, expected <= ${thresholds.lcpMs} ms.`,
+        },
         impact: 'high',
-        possibleFix:
-          lang === 'es'
-            ? 'Reduce peso del contenido principal y precarga recursos clave.'
-            : 'Reduce main-content weight and preload key resources.',
-      })
-    }
-
-    if (result.totalByteWeightKb > thresholds.payloadKb) {
-      issueCount += 1
-      actions.add(
-        lang === 'es'
-          ? 'Comprime imagenes y elimina archivos que no aportan valor.'
-          : 'Compress images and remove files that do not add value.',
-      )
-      rootCauses.push({
-        cause: lang === 'es' ? 'La pagina pesa demasiado' : 'The page payload is too heavy',
-        evidence:
-          lang === 'es'
-            ? `Pagina pesada: actual ${result.totalByteWeightKb} KB, esperado <= ${thresholds.payloadKb} KB.`
-            : `Heavy page payload: current ${result.totalByteWeightKb} KB, expected <= ${thresholds.payloadKb} KB.`,
+        possibleFix: {
+          es: 'Reduce peso del contenido principal y precarga recursos clave.',
+          en: 'Reduce main-content weight and preload key resources.',
+        },
+      },
+      {
+        triggered: result.totalByteWeightKb > thresholds.payloadKb,
+        action: {
+          es: 'Comprime imagenes y elimina archivos que no aportan valor.',
+          en: 'Compress images and remove files that do not add value.',
+        },
+        cause: {
+          es: 'La pagina pesa demasiado',
+          en: 'The page payload is too heavy',
+        },
+        evidence: {
+          es: `Pagina pesada: actual ${result.totalByteWeightKb} KB, esperado <= ${thresholds.payloadKb} KB.`,
+          en: `Heavy page payload: current ${result.totalByteWeightKb} KB, expected <= ${thresholds.payloadKb} KB.`,
+        },
         impact: 'high',
-        possibleFix:
-          lang === 'es'
-            ? 'Usa compresion y elimina recursos innecesarios.'
-            : 'Use compression and remove unnecessary resources.',
-      })
-    }
-
-    if (typeof result.callTimeAvgMs === 'number' && result.callTimeAvgMs > thresholds.avgCallMs) {
-      issueCount += 1
-      actions.add(
-        lang === 'es'
-          ? 'Optimiza consultas, agrega cache y revisa endpoints lentos.'
-          : 'Optimize queries, add caching, and review slow endpoints.',
-      )
-      rootCauses.push({
-        cause: lang === 'es' ? 'El servidor responde lento' : 'The server responds too slowly',
-        evidence:
-          lang === 'es'
-            ? `Llamadas API lentas: promedio actual ${result.callTimeAvgMs.toFixed(2)} ms, esperado <= ${thresholds.avgCallMs} ms.`
-            : `Slow API calls: current average ${result.callTimeAvgMs.toFixed(2)} ms, expected <= ${thresholds.avgCallMs} ms.`,
+        possibleFix: {
+          es: 'Usa compresion y elimina recursos innecesarios.',
+          en: 'Use compression and remove unnecessary resources.',
+        },
+      },
+      {
+        triggered:
+          typeof result.callTimeAvgMs === 'number' && result.callTimeAvgMs > thresholds.avgCallMs,
+        action: {
+          es: 'Optimiza consultas, agrega cache y revisa endpoints lentos.',
+          en: 'Optimize queries, add caching, and review slow endpoints.',
+        },
+        cause: {
+          es: 'El servidor responde lento',
+          en: 'The server responds too slowly',
+        },
+        evidence: {
+          es: `Llamadas API lentas: promedio actual ${result.callTimeAvgMs?.toFixed(2)} ms, esperado <= ${thresholds.avgCallMs} ms.`,
+          en: `Slow API calls: current average ${result.callTimeAvgMs?.toFixed(2)} ms, expected <= ${thresholds.avgCallMs} ms.`,
+        },
         impact: 'medium',
-        possibleFix:
-          lang === 'es'
-            ? 'Revisa base de datos, cache y endpoints con mayor latencia.'
-            : 'Review database, cache, and highest-latency endpoints.',
-      })
-    }
-
-    if (
-      typeof result.callsFailedRate === 'number' &&
-      result.callsFailedRate > thresholds.failureRatePercent
-    ) {
-      issueCount += 1
-      actions.add(
-        lang === 'es'
-          ? 'Revisa codigos de error, timeouts y endpoints inestables.'
-          : 'Review status codes, timeouts, and unstable endpoints.',
-      )
-      rootCauses.push({
-        cause:
-          lang === 'es' ? 'Demasiadas solicitudes estan fallando' : 'Too many requests are failing',
-        evidence:
-          lang === 'es'
-            ? `Tasa de error alta: actual ${result.callsFailedRate.toFixed(2)}%, esperado <= ${thresholds.failureRatePercent}%.`
-            : `High error rate: current ${result.callsFailedRate.toFixed(2)}%, expected <= ${thresholds.failureRatePercent}%.`,
+        possibleFix: {
+          es: 'Revisa base de datos, cache y endpoints con mayor latencia.',
+          en: 'Review database, cache, and highest-latency endpoints.',
+        },
+      },
+      {
+        triggered:
+          typeof result.callsFailedRate === 'number' &&
+          result.callsFailedRate > thresholds.failureRatePercent,
+        action: {
+          es: 'Revisa codigos de error, timeouts y endpoints inestables.',
+          en: 'Review status codes, timeouts, and unstable endpoints.',
+        },
+        cause: {
+          es: 'Demasiadas solicitudes estan fallando',
+          en: 'Too many requests are failing',
+        },
+        evidence: {
+          es: `Tasa de error alta: actual ${result.callsFailedRate?.toFixed(2)}%, esperado <= ${thresholds.failureRatePercent}%.`,
+          en: `High error rate: current ${result.callsFailedRate?.toFixed(2)}%, expected <= ${thresholds.failureRatePercent}%.`,
+        },
         impact: 'high',
-        possibleFix:
-          lang === 'es'
-            ? 'Valida retries, timeouts y manejo de errores por endpoint.'
-            : 'Validate retries, timeouts, and per-endpoint error handling.',
+        possibleFix: {
+          es: 'Valida retries, timeouts y manejo de errores por endpoint.',
+          en: 'Validate retries, timeouts, and per-endpoint error handling.',
+        },
+      },
+    ]
+
+    for (const rule of rules) {
+      if (!rule.triggered) continue
+      actions.add(rule.action[lang])
+      rootCauses.push({
+        cause: rule.cause[lang],
+        evidence: rule.evidence[lang],
+        impact: rule.impact,
+        possibleFix: rule.possibleFix[lang],
       })
     }
 
-    return { actions: [...actions], rootCauses, issueCount }
+    return { actions: [...actions], rootCauses, issueCount: rootCauses.length }
   }
 
   const averageScore = payload.results.length
@@ -1156,47 +1173,89 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
   const overallScoreClass =
     averageScorePercent >= 90 ? 'good' : averageScorePercent >= 50 ? 'average' : 'poor'
 
+  type OpportunityUnit = 's' | 'ms' | 'value'
+  type OpportunityStatus = 'good' | 'average' | 'poor'
+  interface OpportunityRule {
+    keys: string[]
+    target: string
+    threshold: { max: number; unit: OpportunityUnit }
+  }
+
+  const OPPORTUNITY_RULES: OpportunityRule[] = [
+    {
+      keys: ['first contentful paint'],
+      target: '<= 1.8 s',
+      threshold: { max: 1.8, unit: 's' },
+    },
+    {
+      keys: ['largest contentful paint'],
+      target: '<= 2.5 s',
+      threshold: { max: 2.5, unit: 's' },
+    },
+    {
+      keys: ['time to interactive', 'interactive'],
+      target: '<= 3.8 s',
+      threshold: { max: 3.8, unit: 's' },
+    },
+    { keys: ['speed index'], target: '<= 3.4 s', threshold: { max: 3.4, unit: 's' } },
+    {
+      keys: ['total blocking time'],
+      target: '<= 200 ms',
+      threshold: { max: 200, unit: 'ms' },
+    },
+    {
+      keys: ['max potential first input delay'],
+      target: '<= 100 ms',
+      threshold: { max: 100, unit: 'ms' },
+    },
+    {
+      keys: ['cumulative layout shift'],
+      target: '<= 0.10',
+      threshold: { max: 0.1, unit: 'value' },
+    },
+  ]
+
+  const findOpportunityRule = (title: string): OpportunityRule | null => {
+    const normalizedTitle = title.toLowerCase()
+    return (
+      OPPORTUNITY_RULES.find((rule) =>
+        rule.keys.some((keyFragment) => normalizedTitle.includes(keyFragment)),
+      ) ?? null
+    )
+  }
+
   const getOpportunityTarget = (title: string, lang: LanguageCode): string => {
-    const normalized = title.toLowerCase()
-    if (normalized.includes('first contentful paint')) return '<= 1.8 s'
-    if (normalized.includes('largest contentful paint')) return '<= 2.5 s'
-    if (normalized.includes('speed index')) return '<= 3.4 s'
-    if (normalized.includes('total blocking time')) return '<= 200 ms'
-    if (normalized.includes('max potential first input delay')) return '<= 100 ms'
-    if (normalized.includes('cumulative layout shift')) return '<= 0.10'
+    const rule = findOpportunityRule(title)
+    if (rule) return rule.target
     return lang === 'es' ? 'Score >= 0.90' : 'Score >= 0.90'
   }
 
-  const getOpportunityThreshold = (
-    title: string,
-  ): { max: number; unit: 's' | 'ms' | 'value' } | null => {
-    const normalized = title.toLowerCase()
-    if (normalized.includes('first contentful paint')) return { max: 1.8, unit: 's' }
-    if (normalized.includes('largest contentful paint')) return { max: 2.5, unit: 's' }
-    if (normalized.includes('speed index')) return { max: 3.4, unit: 's' }
-    if (normalized.includes('total blocking time')) return { max: 200, unit: 'ms' }
-    if (normalized.includes('max potential first input delay')) return { max: 100, unit: 'ms' }
-    if (normalized.includes('cumulative layout shift')) return { max: 0.1, unit: 'value' }
-    return null
-  }
+  const getOpportunityThreshold = (title: string): { max: number; unit: OpportunityUnit } | null =>
+    findOpportunityRule(title)?.threshold ?? null
 
   const getOpportunityStatusClass = (
     title: string,
     detail: string,
     score: number | null,
-  ): 'good' | 'average' | 'poor' => {
+  ): OpportunityStatus => {
     const parseOpportunityValue = (
       source: string,
-    ): { value: number; unit: 's' | 'ms' | 'value' } | null => {
+    ): { value: number; unit: OpportunityUnit } | null => {
       const normalized = source.replace(/,/g, '')
       const match = normalized.match(/(\d+(?:\.\d+)?)/)
       if (!match) return null
       const value = Number(match[1])
       if (!Number.isFinite(value)) return null
       const lower = normalized.toLowerCase()
-      if (lower.includes('ms')) return { value, unit: 'ms' }
-      if (lower.includes('s')) return { value, unit: 's' }
-      return { value, unit: 'value' }
+      const detectedUnit = (['ms', 's'] as const).find((unit) => lower.includes(unit))
+      switch (detectedUnit) {
+        case 'ms':
+          return { value, unit: 'ms' }
+        case 's':
+          return { value, unit: 's' }
+        default:
+          return { value, unit: 'value' }
+      }
     }
 
     const threshold = getOpportunityThreshold(title)
@@ -1353,6 +1412,15 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
           }))
           .slice(0, 2)
 
+        const sortedOpportunities = [...result.opportunities].sort((left, right) => {
+          const leftStatus = getOpportunityStatusClass(left.title, left.detail, left.score)
+          const rightStatus = getOpportunityStatusClass(right.title, right.detail, right.score)
+          const statusWeight: Record<OpportunityStatus, number> = { poor: 0, average: 1, good: 2 }
+          if (leftStatus !== rightStatus)
+            return statusWeight[leftStatus] - statusWeight[rightStatus]
+          return left.title.localeCompare(right.title)
+        })
+
         return `
         <section class="card">
           <div class="card-head">
@@ -1411,6 +1479,72 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
               </tbody>
             </table>
           </div>
+          <div class="insight-grid">
+            <section class="insight-card">
+              <h3>🚨 ${labels.findings}</h3>
+              <ul>
+                ${
+                  result.issues.length
+                    ? result.issues.map((item) => `<li class="issue-item">❌ ${item}</li>`).join('')
+                    : `<li>${labels.noData}</li>`
+                }
+              </ul>
+            </section>
+            <section class="insight-card">
+              <h3>🛠️ ${labels.topActions}</h3>
+              <ul>
+                ${
+                  result.suggestions.length
+                    ? result.suggestions
+                        .slice(0, 5)
+                        .map((item) => `<li class="suggestion-item">💡 ${item}</li>`)
+                        .join('')
+                    : `<li>${labels.noData}</li>`
+                }
+              </ul>
+            </section>
+          </div>
+          <section class="opportunity-card">
+            <h3>📊 ${labels.opportunities}</h3>
+            <div class="opportunity-grid">
+              ${
+                sortedOpportunities.length
+                  ? sortedOpportunities
+                      .map((item) => {
+                        const statusClass = getOpportunityStatusClass(
+                          item.title,
+                          item.detail,
+                          item.score,
+                        )
+                        const statusLabel =
+                          statusClass === 'good'
+                            ? labels.opportunityGood
+                            : statusClass === 'average'
+                              ? labels.opportunityNeedsWork
+                              : labels.opportunityCritical
+                        const expected = getOpportunityTarget(item.title, lang)
+                        const currentClass =
+                          statusClass === 'good' ? 'op-current-pass' : 'op-current-fail'
+                        const statusTextClass =
+                          statusClass === 'good' ? 'op-status-pass' : 'op-status-fail'
+                        const statusEmoji =
+                          statusClass === 'good' ? '✅' : statusClass === 'average' ? '⚠️' : '❌'
+
+                        return `<article class="opportunity-item">
+                          <div class="opportunity-head">
+                            <b>${item.title}</b>
+                            <span class="op-badge ${statusClass}">${statusLabel}</span>
+                          </div>
+                          <div class="muted">${labels.opportunityStatus}: <span class="${statusTextClass}">${statusEmoji} ${statusLabel}</span></div>
+                          <div class="muted">${labels.opportunityCurrent}: <span class="${currentClass}">${item.detail}</span></div>
+                          <div class="muted">${labels.opportunityExpected}: ${expected}</div>
+                        </article>`
+                      })
+                      .join('')
+                  : `<p>${labels.noData}</p>`
+              }
+            </div>
+          </section>
           <div class="quick-list">
             <p><b>${labels.comparisonStatus}:</b> ${comparisonStatus}</p>
             <p><b>${labels.previousRun}:</b> ${result.comparison?.previousAnalyzedAt ?? labels.noData}</p>
@@ -1443,41 +1577,6 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
                               : labels.impactLow
 
                         return `<li><b>${item.cause}</b> (${labels.priority}: ${impactLabel})<br /><span class="muted">${labels.whyItMatters}:</span> ${item.evidence}<br /><span class="muted">${labels.whatToDo}:</span> ${item.possibleFix}</li>`
-                      })
-                      .join('')
-                  : `<li>${labels.noData}</li>`
-              }
-            </ul>
-            <h3>${labels.opportunities}</h3>
-            <ul>
-              ${
-                result.opportunities.length
-                  ? result.opportunities
-                      .map((item) => {
-                        const statusClass = getOpportunityStatusClass(
-                          item.title,
-                          item.detail,
-                          item.score,
-                        )
-                        const statusLabel =
-                          statusClass === 'good'
-                            ? labels.opportunityGood
-                            : statusClass === 'average'
-                              ? labels.opportunityNeedsWork
-                              : labels.opportunityCritical
-                        const expected = getOpportunityTarget(item.title, lang)
-                        const currentClass =
-                          statusClass === 'good' ? 'op-current-pass' : 'op-current-fail'
-                        const statusTextClass =
-                          statusClass === 'good' ? 'op-status-pass' : 'op-status-fail'
-
-                        return `<li class="opportunity-item">
-                          <div class="opportunity-head">
-                            <b>${item.title}</b>
-                            <span class="op-badge ${statusClass}">${statusLabel}</span>
-                          </div>
-                          <div class="muted">${labels.opportunityStatus}: <span class="${statusTextClass}">${statusLabel}</span> | ${labels.opportunityCurrent}: <span class="${currentClass}">${item.detail}</span> | ${labels.opportunityExpected}: ${expected}</div>
-                        </li>`
                       })
                       .join('')
                   : `<li>${labels.noData}</li>`
@@ -1616,6 +1715,14 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
       .summary-table { width: 100%; border-collapse: collapse; font-size: 13px; }
       .summary-table th, .summary-table td { padding: 6px 4px; border-bottom: 1px solid #e2e8f0; text-align: left; }
       .summary-table th { color: #475569; font-weight: 600; }
+      .insight-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
+      .insight-card { border: 1px solid #e2e8f0; background: #fff; border-radius: 10px; padding: 10px; }
+      .insight-card h3 { margin-top: 0; }
+      .issue-item { color: #991b1b; font-weight: 700; }
+      .suggestion-item { color: #334155; }
+      .opportunity-card { border: 1px solid #e2e8f0; background: #fff; border-radius: 10px; padding: 10px; margin-bottom: 10px; }
+      .opportunity-card h3 { margin-top: 0; }
+      .opportunity-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
       .quick-list { color: #334155; display: grid; gap: 6px; margin-bottom: 6px; }
       .quick-list p { margin: 0; }
       details { margin-top: 8px; border-top: 1px solid #e2e8f0; padding-top: 8px; }
@@ -1629,7 +1736,7 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
       .dot.medium { background: #f59e0b; }
       .dot.low { background: #16a34a; }
       .muted { color: #64748b; font-weight: 600; }
-      .opportunity-item { margin-bottom: 10px; }
+      .opportunity-item { margin-bottom: 0; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px; background: #fff; }
       .opportunity-head { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
       .op-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
       .op-badge.good { background: #ecfdf3; color: #166534; border: 1px solid #bbf7d0; }
@@ -1640,7 +1747,7 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
       .op-current-pass { color: #16a34a; font-weight: 800; text-shadow: 0 0 8px rgb(22 163 74 / 35%); }
       .op-current-fail { color: #dc2626; font-weight: 800; text-shadow: 0 0 8px rgb(220 38 38 / 35%); }
       .shot { width: 100%; max-width: 860px; border-radius: 8px; border: 1px solid #e2e8f0; }
-      @media (max-width: 960px) { .overview { grid-template-columns: 1fr; } .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .hero-grid { grid-template-columns: 1fr; } }
+      @media (max-width: 960px) { .overview { grid-template-columns: 1fr; } .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .hero-grid { grid-template-columns: 1fr; } .insight-grid { grid-template-columns: 1fr; } .opportunity-grid { grid-template-columns: 1fr; } }
     </style>
   </head>
   <body>

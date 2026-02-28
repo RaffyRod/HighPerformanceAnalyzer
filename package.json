@@ -5,6 +5,7 @@
   "description": "Web app to run URL discovery and performance analysis with k6 + Lighthouse.",
   "type": "module",
   "scripts": {
+    "quick-setup": "node scripts/quick-setup.mjs",
     "dev": "node scripts/dev-auto-port.mjs",
     "build": "pnpm -r --if-present build",
     "lint": "pnpm -r --if-present lint",

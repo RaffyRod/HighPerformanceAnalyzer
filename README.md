@@ -1,161 +1,143 @@
-# High Performance Analyzer 🚀
+# High Performance Analyzer
 
-Analyze any website with Lighthouse + load checks, discover internal URLs, and generate a friendly HTML report with actionable fixes.
+High Performance Analyzer is a TypeScript monorepo that runs Lighthouse and load checks for a target URL, then produces a bilingual, actionable HTML report focused on performance diagnosis and remediation.
 
-## ✨ Features
+## Core Capabilities
 
-- 🌐 Analyze one URL or discovered internal URLs (same domain)
-- ⚡ Lighthouse metrics (Performance score, FCP, LCP, TTI)
-- 📡 Request latency + failure insights (k6 or internal fallback)
-- 🌍 Bilingual UI/report (`en` / `es`)
-- 📊 Friendly HTML report (score overview, priorities, causes, actions)
-- 🧭 Executive readability layer per URL:
-  - Overall status badge (`Healthy` / `Needs attention` / `Critical`)
-  - Gap table (`Current` vs `Target` + `% gap`)
-  - "Focus first" priorities to act quickly
-- 🟥🟩 Opportunity status colors:
-  - Red when metric fails expected threshold
-  - Green when metric passes expected threshold
-- ✅❌ Opportunity readability upgrades:
-  - Fail items listed first, pass items after
-  - Compact side-by-side cards on desktop
-  - Bright status emphasis for `Status` and `Current`
-  - Prominent "Open HTML report" CTA in app results
-- 🧪 Analyzer quality upgrades:
-  - Lighthouse + k6 run in parallel per URL to reduce end-to-end analysis time
-  - k6 uses thresholds (`http_req_failed`, `http_req_duration`) and richer trend stats
-  - Network requests use timeouts to avoid hanging analysis runs
-  - Safer k6 script generation with escaped runtime values
-- 🕒 Before/after comparison against previous runs
-- 🗂️ Report retention:
-  - Stored in `reports/`
-  - Naming: `analysis-YYYY-MM-DD.html`
-  - Same-day runs overwrite that day file
-  - Keep only latest 5 HTML reports
+- Analyze a single URL or discovered internal URLs (same origin)
+- Lighthouse performance audit with key web vitals (FCP, LCP, TTI, payload)
+- Load metrics with k6 (or internal fallback when k6 is unavailable)
+- Bilingual UX and reports (`en` / `es`)
+- Executive report view with:
+  - health badges and score summary
+  - gap analysis (`Current` vs `Target`)
+  - fail-first opportunity prioritization
+  - colored status emphasis (green pass / red fail)
+- Historical comparison against previous runs
+- Report retention policy (last 5 HTML reports)
 
-## ⚡ Quick Setup (Recommended)
+## Quick Setup (First Run)
 
-### 1) Install dependencies
+For a clean first-time setup, run:
 
 ```bash
-pnpm install
+pnpm quick-setup
 ```
 
-### 2) Start the full app (API + Web)
+This command performs the full initial bootstrap:
+
+1. installs all workspace dependencies
+2. installs Playwright Chromium runtime
+3. builds API workspace
+4. builds web workspace
+5. writes setup completion metadata
+
+After setup:
 
 ```bash
 pnpm dev
 ```
 
-### 3) Open the app URL shown in terminal
+## Standard Commands
 
-- Fill target URL
-- Add Bearer token if needed
-- Select language
-- Run analysis ✅
+- `pnpm dev` - start API + Web with auto-selected free ports
+- `pnpm build` - build all workspaces
+- `pnpm lint` - run lint across workspaces
+- `pnpm test` - run API unit tests (Vitest)
+- `pnpm test:e2e` - run web E2E tests (Playwright)
+- `pnpm format` - format repository with Prettier
 
-## 🔗 Important Routes
+Workspace-level examples:
 
-- Web app: printed by `pnpm dev` (auto-port)
-- API health: `GET /api/health`
-- Analyze: `POST /api/analyze`
-- Report by id: `GET /api/report/:id`
+- `pnpm --filter @hpa/api dev`
+- `pnpm --filter @hpa/api test`
+- `pnpm --filter @hpa/web dev`
+- `pnpm --filter @hpa/web test:e2e`
+
+## API and Routes
+
+- Web app URL: printed by `pnpm dev` (dynamic port)
+- Health endpoint: `GET /api/health`
+- Analyze endpoint: `POST /api/analyze`
+- HTML report endpoint: `GET /api/report/:id`
 
 Example payload:
 
 ```json
 {
   "url": "https://example.com",
-  "bearerToken": "your-token-if-needed",
+  "bearerToken": "optional-token",
   "language": "en",
   "includeDiscoveredUrls": true
 }
 ```
 
-## 🧱 Project Structure
+## Project Structure
 
 ```text
 apps/
-  api/        # Fastify + TypeScript API
-  web/        # Vue 3 + TypeScript frontend
+  api/                # Fastify API (analysis engine + report generation)
+  web/                # Vue 3 frontend
 packages/
-  shared/     # Shared contracts/types
+  shared/             # Shared contracts and types
 scripts/
-  dev-auto-port.mjs  # Finds free ports automatically
-reports/      # Generated reports + history + setup logs
+  dev-auto-port.mjs   # Dynamic port allocation for local dev
+  quick-setup.mjs     # First-run bootstrap automation
+reports/              # Generated reports, history, and setup diagnostics
 ```
 
-## 🔧 Environment & Dynamic Paths
+## Environment Configuration
 
-The app is portable across machines and supports dynamic config:
+Supported environment variables:
 
 - `API_HOST`, `API_PORT`, `WEB_PORT`
 - `VITE_API_TARGET`
 - `DEV_HOST`
-- `HPA_REPORTS_DIR` (custom reports directory)
+- `HPA_REPORTS_DIR`
+- `HPA_REQUEST_TIMEOUT_MS`
 
-If not provided, safe defaults are used.
+## k6 Runtime Behavior
 
-## 🧪 k6 First-Run Behavior
+At analysis time:
 
-When running analysis:
+1. uses `k6` when available
+2. attempts OS-specific install when missing (`winget` / `choco` / `scoop` / `brew`)
+3. falls back to internal HTTP load probe if k6 is still unavailable
 
-1. Uses `k6` if available in `PATH`
-2. If missing, tries one-time install:
-   - Windows: `winget` → `choco` → `scoop`
-   - macOS: `brew`
-3. If still unavailable, continues with internal HTTP fallback (analysis does not break)
-
-Setup diagnostics:
+Diagnostic file:
 
 - `reports/.setup/k6-bootstrap.json`
 
-## 🛠️ Dev Commands
+## Quality and Tooling
 
-- `pnpm dev` - Run API + Web with auto free ports
-- `pnpm build` - Build all workspaces
-- `pnpm lint` - Lint all workspaces
-- `pnpm test` - Run API unit tests (Vitest)
-- `pnpm test:e2e` - Run web E2E tests (Playwright)
-- `pnpm format` - Format repository
+- TypeScript across frontend/backend/shared
+- ESLint + Prettier
+- Husky + lint-staged pre-commit checks
+- Vitest for API unit tests
+- Playwright for end-to-end smoke coverage
 
-Workspace examples:
+## Troubleshooting
 
-- `pnpm --filter @hpa/api dev`
-- `pnpm --filter @hpa/web dev`
-- `pnpm --filter @hpa/api build`
-- `pnpm --filter @hpa/web build`
-- `pnpm --filter @hpa/api test`
-- `pnpm --filter @hpa/web test:e2e`
+### Analysis failure in UI
 
-## 🆘 Troubleshooting
+Validate:
 
-### "Analysis failed..." in UI
+- target URL accessibility
+- bearer token validity (if required)
+- local Chrome availability
+- package manager tools for k6 bootstrap (if k6 missing)
+- setup diagnostics in `reports/.setup/k6-bootstrap.json`
 
-Check:
+### Port conflicts
 
-- URL is reachable
-- Bearer token is valid (if required)
-- Chrome is installed
-- k6 installer tools are available (`winget`, `choco`, `scoop`, or `brew`)
-- `reports/.setup/k6-bootstrap.json` for setup details
-
-### Ports already in use
-
-Just run:
+Use:
 
 ```bash
 pnpm dev
 ```
 
-It auto-finds available ports.
-
-## ✅ Tooling
-
-- TypeScript (frontend + backend + shared)
-- ESLint + Prettier
-- Husky + lint-staged pre-commit checks
+The dev launcher automatically resolves free ports.
 
 ---
 
-Built to make performance diagnostics easier to understand and faster to act on. 💙
+Designed for clear performance diagnostics and fast remediation workflows.

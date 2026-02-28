@@ -148,3 +148,6 @@ apps/web/.vite/
 # Test artifacts
 playwright-report/
 test-results/
+
+# Local setup metadata
+.hpa/
