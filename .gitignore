@@ -137,3 +137,14 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Runtime report artifacts
+reports/
+apps/api/reports/
+
+# Vite local cache
+apps/web/.vite/
+
+# Test artifacts
+playwright-report/
+test-results/

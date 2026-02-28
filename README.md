@@ -21,6 +21,11 @@ Analyze any website with Lighthouse + load checks, discover internal URLs, and g
   - Compact side-by-side cards on desktop
   - Bright status emphasis for `Status` and `Current`
   - Prominent "Open HTML report" CTA in app results
+- 🧪 Analyzer quality upgrades:
+  - Lighthouse + k6 run in parallel per URL to reduce end-to-end analysis time
+  - k6 uses thresholds (`http_req_failed`, `http_req_duration`) and richer trend stats
+  - Network requests use timeouts to avoid hanging analysis runs
+  - Safer k6 script generation with escaped runtime values
 - 🕒 Before/after comparison against previous runs
 - 🗂️ Report retention:
   - Stored in `reports/`
@@ -110,6 +115,8 @@ Setup diagnostics:
 - `pnpm dev` - Run API + Web with auto free ports
 - `pnpm build` - Build all workspaces
 - `pnpm lint` - Lint all workspaces
+- `pnpm test` - Run API unit tests (Vitest)
+- `pnpm test:e2e` - Run web E2E tests (Playwright)
 - `pnpm format` - Format repository
 
 Workspace examples:
@@ -118,6 +125,8 @@ Workspace examples:
 - `pnpm --filter @hpa/web dev`
 - `pnpm --filter @hpa/api build`
 - `pnpm --filter @hpa/web build`
+- `pnpm --filter @hpa/api test`
+- `pnpm --filter @hpa/web test:e2e`
 
 ## 🆘 Troubleshooting
 

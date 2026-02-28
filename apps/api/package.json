@@ -7,11 +7,14 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
-    "lint": "eslint \"src/**/*.{ts,js}\""
+    "lint": "eslint \"src/**/*.{ts,js}\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@hpa/shared": "workspace:*",
     "@fastify/cors": "^11.1.0",
+    "@hpa/shared": "workspace:*",
     "cheerio": "^1.1.2",
     "chrome-launcher": "^1.2.1",
     "fastify": "^5.6.2",
@@ -20,7 +23,9 @@
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
+    "@vitest/coverage-v8": "^4.0.18",
     "tsx": "^4.20.6",
-    "typescript": "~5.9.3"
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.18"
   }
 }

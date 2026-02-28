@@ -8,6 +8,9 @@
     "dev": "node scripts/dev-auto-port.mjs",
     "build": "pnpm -r --if-present build",
     "lint": "pnpm -r --if-present lint",
+    "test": "pnpm --filter @hpa/api test",
+    "test:api": "pnpm --filter @hpa/api test",
+    "test:e2e": "pnpm --filter @hpa/web test:e2e",
     "format": "prettier --write .",
     "prepare": "husky"
   },

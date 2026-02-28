@@ -6,12 +6,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import type {
-  AnalyzeRequest,
-  AnalyzeResponse,
-  UrlInsights,
-  LanguageCode,
-} from '@hpa/shared/src/index.js'
+import type { AnalyzeRequest, AnalyzeResponse, UrlInsights, LanguageCode } from '@hpa/shared'
 import { t } from '../utils/i18n.js'
 
 interface K6Summary {
@@ -69,6 +64,7 @@ const SETUP_DIR = path.join(REPORTS_DIR, '.setup')
 const K6_SETUP_FILE = path.join(SETUP_DIR, 'k6-bootstrap.json')
 const FALLBACK_REQUESTS = 25
 const FALLBACK_CONCURRENCY = 5
+const REQUEST_TIMEOUT_MS = Number(process.env.HPA_REQUEST_TIMEOUT_MS ?? 15000)
 
 let k6ReadyCache: boolean | null = null
 
@@ -260,7 +256,10 @@ const discoverUrls = async (request: AnalyzeRequest): Promise<string[]> => {
     ? { Authorization: `Bearer ${request.bearerToken}` }
     : {}
 
-  const response = await fetch(startUrl, { headers })
+  const response = await fetch(startUrl, {
+    headers,
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  })
 
   if (!response.ok) {
     throw new Error(`Failed to fetch target URL. Status: ${response.status}`)
@@ -400,7 +399,8 @@ const runK6Binary = async (url: string, bearerToken?: string): Promise<K6Summary
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'hpa-k6-'))
   const scriptPath = path.join(tempDir, 'script.js')
   const summaryPath = path.join(tempDir, 'summary.json')
-  const authHeader = bearerToken ? `'Authorization': 'Bearer ${bearerToken}',` : ''
+  const targetUrlLiteral = JSON.stringify(url)
+  const bearerTokenLiteral = JSON.stringify(bearerToken ?? '')
 
   const k6Script = `
 import http from 'k6/http'
@@ -409,39 +409,62 @@ import { check, sleep } from 'k6'
 export const options = {
   vus: 5,
   duration: '10s',
+  thresholds: {
+    http_req_failed: ['rate<0.01'],
+    http_req_duration: ['p(95)<1200'],
+  },
 }
 
+const TARGET_URL = ${targetUrlLiteral}
+const BEARER_TOKEN = ${bearerTokenLiteral}
+
 export default function() {
-  const response = http.get('${url}', { headers: { ${authHeader} } })
+  const headers = BEARER_TOKEN ? { Authorization: 'Bearer ' + BEARER_TOKEN } : {}
+  const response = http.get(TARGET_URL, { headers })
   check(response, { 'status is 200': (r) => r.status >= 200 && r.status < 400 })
-  sleep(1)
+  sleep(0.5)
 }
 `
 
   await fs.writeFile(scriptPath, k6Script, 'utf-8')
 
-  await new Promise<void>((resolve, reject) => {
-    const proc = spawn('k6', ['run', scriptPath, '--summary-export', summaryPath, '--quiet'], {
-      shell: true,
-    })
-
-    let stderr = ''
-
-    proc.stderr.on('data', (chunk) => {
-      stderr += chunk.toString()
-    })
-
-    proc.on('error', (error) => reject(error))
-    proc.on('close', (code) => {
-      if (code === 0) return resolve()
-      reject(
-        new Error(stderr || 'k6 execution failed. Ensure k6 is installed and available in PATH.'),
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(
+        'k6',
+        [
+          'run',
+          scriptPath,
+          '--summary-export',
+          summaryPath,
+          '--summary-trend-stats',
+          'avg,min,med,max,p(90),p(95),p(99)',
+          '--quiet',
+        ],
+        {
+          shell: true,
+        },
       )
-    })
-  })
 
-  const summaryRaw = await fs.readFile(summaryPath, 'utf-8')
-  return JSON.parse(summaryRaw) as K6Summary
+      let stderr = ''
+
+      proc.stderr.on('data', (chunk) => {
+        stderr += chunk.toString()
+      })
+
+      proc.on('error', (error) => reject(error))
+      proc.on('close', (code) => {
+        if (code === 0) return resolve()
+        reject(
+          new Error(stderr || 'k6 execution failed. Ensure k6 is installed and available in PATH.'),
+        )
+      })
+    })
+    const summaryRaw = await fs.readFile(summaryPath, 'utf-8')
+    return JSON.parse(summaryRaw) as K6Summary
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true })
+  }
 }
 
 const runFallbackLoadTest = async (url: string, bearerToken?: string): Promise<K6Summary> => {
@@ -452,10 +475,19 @@ const runFallbackLoadTest = async (url: string, bearerToken?: string): Promise<K
 
   const runSingleRequest = async (): Promise<void> => {
     const startedAt = Date.now()
-    const response = await fetch(url, { headers })
-    const elapsedMs = Date.now() - startedAt
-    durationsMs.push(elapsedMs)
-    if (!response.ok) {
+    try {
+      const response = await fetch(url, {
+        headers,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      })
+      const elapsedMs = Date.now() - startedAt
+      durationsMs.push(elapsedMs)
+      if (!response.ok) {
+        failedCount += 1
+      }
+    } catch {
+      const elapsedMs = Date.now() - startedAt
+      durationsMs.push(elapsedMs)
       failedCount += 1
     }
   }
@@ -1153,11 +1185,27 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
     detail: string,
     score: number | null,
   ): 'good' | 'average' | 'poor' => {
+    const parseOpportunityValue = (
+      source: string,
+    ): { value: number; unit: 's' | 'ms' | 'value' } | null => {
+      const normalized = source.replace(/,/g, '')
+      const match = normalized.match(/(\d+(?:\.\d+)?)/)
+      if (!match) return null
+      const value = Number(match[1])
+      if (!Number.isFinite(value)) return null
+      const lower = normalized.toLowerCase()
+      if (lower.includes('ms')) return { value, unit: 'ms' }
+      if (lower.includes('s')) return { value, unit: 's' }
+      return { value, unit: 'value' }
+    }
+
     const threshold = getOpportunityThreshold(title)
     if (threshold) {
-      const currentMatch = detail.match(/(\d+(?:\.\d+)?)/)
-      if (currentMatch) {
-        const currentValue = Number(currentMatch[1])
+      const parsedValue = parseOpportunityValue(detail)
+      if (parsedValue) {
+        let currentValue = parsedValue.value
+        if (parsedValue.unit === 'ms' && threshold.unit === 's') currentValue /= 1000
+        if (parsedValue.unit === 's' && threshold.unit === 'ms') currentValue *= 1000
         return currentValue <= threshold.max ? 'good' : 'poor'
       }
     }
@@ -1633,8 +1681,10 @@ export const analyzeWebsite = async (request: AnalyzeRequest): Promise<AnalyzeRe
     : null
 
   for (const discoveredUrl of discoveredUrls) {
-    const lighthouseResult = await runLighthouse(discoveredUrl)
-    const k6Summary = await runK6(discoveredUrl, request.bearerToken)
+    const [lighthouseResult, k6Summary] = await Promise.all([
+      runLighthouse(discoveredUrl),
+      runK6(discoveredUrl, request.bearerToken),
+    ])
     const { issues, suggestions, rootCauses, k6Metrics } = evaluateViolations(
       request.language,
       lighthouseResult,

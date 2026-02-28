@@ -1,4 +1,4 @@
-import type { LanguageCode } from '@hpa/shared/src/index.js'
+import type { LanguageCode } from '@hpa/shared'
 
 const messages = {
   en: {

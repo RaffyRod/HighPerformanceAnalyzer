@@ -1,7 +1,7 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import { analyzeWebsite, readReportById } from './services/analyzer.service.js'
-import type { AnalyzeRequest, LanguageCode } from '@hpa/shared/src/index.js'
+import type { AnalyzeRequest, LanguageCode } from '@hpa/shared'
 
 const app = Fastify({ logger: true })
 

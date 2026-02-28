@@ -1,3 +1,3 @@
-import type { AnalyzeResponse } from '@hpa/shared/src/index.js'
+import type { AnalyzeResponse } from '@hpa/shared'
 
 export type AnalyzeApiResponse = AnalyzeResponse
