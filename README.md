@@ -89,15 +89,21 @@ Multi-analysis payload (up to 20 URLs):
 ## 🧱 Project Structure
 
 ```text
-apps/
-  api/                # Fastify API (analysis engine + HTML report)
-  web/                # Vue 3 frontend
-packages/
-  shared/             # Shared contracts and types
-scripts/
-  dev-auto-port.mjs   # Dynamic local ports
-  quick-setup.mjs     # First-run bootstrap
-reports/              # Generated reports + setup diagnostics
+high-performance-analyzer/
+├─ apps/
+│  ├─ api/                    # Fastify backend: analysis engine + HTML report generation
+│  │  ├─ src/
+│  │  └─ tests/
+│  └─ web/                    # Vue frontend: form, progress, and results UI
+│     ├─ src/
+│     └─ tests/e2e/
+├─ packages/
+│  └─ shared/                 # Shared TypeScript contracts (request/response/types)
+├─ scripts/
+│  ├─ dev-auto-port.mjs       # Runs API + Web with free local ports
+│  └─ quick-setup.mjs         # First-run bootstrap helper
+├─ reports/                   # Generated HTML reports + setup diagnostics
+└─ .github/workflows/         # CI (unit tests on PRs and ci branch pushes)
 ```
 
 ## 🔧 Environment Variables
