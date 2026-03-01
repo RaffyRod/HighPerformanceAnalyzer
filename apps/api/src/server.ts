@@ -1,7 +1,8 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import { analyzeWebsite, readReportById } from './services/analyzer.service.js'
-import type { AnalyzeRequest, LanguageCode } from '@hpa/shared'
+import type { AnalyzeRequest } from '@hpa/shared'
+import { validateAndNormalizeAnalyzeRequest } from './utils/analyze-request.js'
 
 const app = Fastify({ logger: true })
 
@@ -10,22 +11,13 @@ await app.register(cors, { origin: true })
 app.get('/api/health', async () => ({ ok: true }))
 
 app.post<{ Body: AnalyzeRequest }>('/api/analyze', async (request, reply) => {
-  const body = request.body
-
-  if (!body?.url) {
-    return reply.code(400).send({ message: 'url is required' })
-  }
-
-  const language: LanguageCode = body.language === 'es' ? 'es' : 'en'
-  const payload: AnalyzeRequest = {
-    url: body.url,
-    bearerToken: body.bearerToken?.trim() || undefined,
-    language,
-    includeDiscoveredUrls: body.includeDiscoveredUrls !== false,
+  const validation = validateAndNormalizeAnalyzeRequest(request.body)
+  if (!validation.ok) {
+    return reply.code(validation.statusCode).send({ message: validation.message })
   }
 
   try {
-    const report = await analyzeWebsite(payload)
+    const report = await analyzeWebsite(validation.payload)
     return report
   } catch (error) {
     request.log.error(error)

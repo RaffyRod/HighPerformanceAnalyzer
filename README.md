@@ -8,6 +8,7 @@ High Performance Analyzer is a TypeScript monorepo that audits website performan
 - ⚡ Measure key performance vitals (FCP, LCP, TTI, payload)
 - 📡 Evaluate request latency and failure behavior with k6 (or safe fallback)
 - 🌍 Use bilingual UX/reporting (`en` / `es`)
+- 🇬🇧 Default language is English for both app and generated reports (switch anytime to ES)
 - 📊 Get user-friendly HTML output with:
   - health badges and score cards
   - fail-first opportunities
@@ -71,6 +72,8 @@ Sample payload:
   "includeDiscoveredUrls": true
 }
 ```
+
+Note: if `language` is omitted, analysis defaults to `en`.
 
 ## 🧱 Project Structure
 

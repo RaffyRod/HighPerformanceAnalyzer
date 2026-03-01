@@ -1,7 +1,8 @@
 export type LanguageCode = 'en' | 'es'
 
 export interface AnalyzeRequest {
-  url: string
+  url?: string
+  urls?: string[]
   bearerToken?: string
   language: LanguageCode
   includeDiscoveredUrls?: boolean

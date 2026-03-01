@@ -7,17 +7,22 @@ import AnalysisProgress from './components/AnalysisProgress.vue'
 import AnalysisResults from './components/AnalysisResults.vue'
 
 const { t, locale } = useI18n()
+const SAVED_URLS_STORAGE_KEY = 'hpa-saved-urls'
+const MAX_SAVED_URLS = 10
 
 const form = reactive({
   url: '',
+  urlsBatchText: '',
   bearerToken: '',
-  language: 'es' as 'es' | 'en',
+  language: 'en' as 'es' | 'en',
+  analysisMode: 'single' as 'single' | 'multi',
   includeDiscoveredUrls: false,
 })
 
 const loading = ref(false)
 const errorMessage = ref('')
 const report = ref<AnalyzeApiResponse | null>(null)
+const savedUrls = ref<string[]>([])
 const apiReachable = ref<boolean | null>(null)
 const apiHealthChecking = ref(false)
 const apiHealthInterval = ref<number | null>(null)
@@ -132,7 +137,74 @@ const setLanguage = (language: 'es' | 'en'): void => {
   locale.value = language
 }
 
+const setAnalysisMode = (mode: 'single' | 'multi'): void => {
+  form.analysisMode = mode
+}
+
+const parseMultiUrls = (): string[] =>
+  form.urlsBatchText
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+
+const normalizeSavedUrl = (value: string): string => {
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+
+  try {
+    return new URL(trimmed).toString()
+  } catch {
+    return ''
+  }
+}
+
+const persistSavedUrls = (): void => {
+  localStorage.setItem(SAVED_URLS_STORAGE_KEY, JSON.stringify(savedUrls.value))
+}
+
+const saveCurrentUrl = (): void => {
+  const normalizedUrl = normalizeSavedUrl(form.url)
+  if (!normalizedUrl) {
+    errorMessage.value = t('savedUrlsInvalidUrl')
+    return
+  }
+
+  errorMessage.value = ''
+  const withoutDuplicate = savedUrls.value.filter((item) => item !== normalizedUrl)
+  savedUrls.value = [normalizedUrl, ...withoutDuplicate].slice(0, MAX_SAVED_URLS)
+  form.url = normalizedUrl
+  persistSavedUrls()
+}
+
+const selectSavedUrl = (value: string): void => {
+  const normalizedUrl = normalizeSavedUrl(value)
+  if (!normalizedUrl) return
+  form.url = normalizedUrl
+}
+
 const runAnalysis = async (): Promise<void> => {
+  const isMultiAnalysis = form.analysisMode === 'multi'
+  const multiUrls = isMultiAnalysis ? parseMultiUrls() : []
+
+  if (isMultiAnalysis) {
+    if (multiUrls.length < 20) {
+      errorMessage.value = t('multiMinUrlsError')
+      return
+    }
+    const hasInvalidUrl = multiUrls.some((item) => {
+      try {
+        void new URL(item)
+        return false
+      } catch {
+        return true
+      }
+    })
+    if (hasInvalidUrl) {
+      errorMessage.value = t('multiInvalidUrlsError')
+      return
+    }
+  }
+
   const apiOk = await checkApiHealth()
   if (!apiOk) {
     errorMessage.value = t('networkError')
@@ -150,10 +222,11 @@ const runAnalysis = async (): Promise<void> => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        url: form.url,
+        url: isMultiAnalysis ? undefined : form.url,
+        urls: isMultiAnalysis ? multiUrls : undefined,
         bearerToken: form.bearerToken || undefined,
         language: form.language,
-        includeDiscoveredUrls: form.includeDiscoveredUrls,
+        includeDiscoveredUrls: isMultiAnalysis ? false : form.includeDiscoveredUrls,
       }),
     })
 
@@ -192,6 +265,21 @@ const runAnalysis = async (): Promise<void> => {
 }
 
 onMounted(() => {
+  const rawSavedUrls = localStorage.getItem(SAVED_URLS_STORAGE_KEY)
+  if (rawSavedUrls) {
+    try {
+      const parsed = JSON.parse(rawSavedUrls) as unknown
+      if (Array.isArray(parsed)) {
+        savedUrls.value = parsed
+          .map((entry) => (typeof entry === 'string' ? normalizeSavedUrl(entry) : ''))
+          .filter((entry) => entry.length > 0)
+          .slice(0, MAX_SAVED_URLS)
+      }
+    } catch {
+      savedUrls.value = []
+    }
+  }
+
   void checkApiHealth()
   apiHealthInterval.value = window.setInterval(() => {
     void checkApiHealth()
@@ -240,14 +328,21 @@ onUnmounted(() => {
     <AnalysisForm
       :loading="loading"
       :url="form.url"
+      :urls-batch-text="form.urlsBatchText"
       :bearer-token="form.bearerToken"
       :language="form.language"
+      :analysis-mode="form.analysisMode"
       :include-discovered-urls="form.includeDiscoveredUrls"
+      :saved-urls="savedUrls"
       @submit="runAnalysis"
       @update:url="form.url = $event"
+      @update:urls-batch-text="form.urlsBatchText = $event"
       @update:bearer-token="form.bearerToken = $event"
       @update:include-discovered-urls="form.includeDiscoveredUrls = $event"
       @update:language="setLanguage"
+      @update:analysis-mode="setAnalysisMode"
+      @save-url="saveCurrentUrl"
+      @select-saved-url="selectSavedUrl"
     />
 
     <AnalysisProgress v-if="loading" :progress="progress" :current-phase="currentPhase" />

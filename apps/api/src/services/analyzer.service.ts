@@ -31,6 +31,8 @@ interface LighthouseAudit {
 }
 
 const MAX_URLS = 5
+const MIN_MULTI_ANALYSIS_URLS = 20
+const MAX_MULTI_ANALYSIS_URLS = 200
 const MAX_REPORT_FILES = 5
 const CURRENT_FILE_DIR = path.dirname(fileURLToPath(import.meta.url))
 const resolveProjectRoot = (): string => {
@@ -250,7 +252,7 @@ const ensureK6Ready = async (): Promise<boolean> => {
   return false
 }
 
-const discoverUrls = async (request: AnalyzeRequest): Promise<string[]> => {
+const discoverUrls = async (request: AnalyzeRequest & { url: string }): Promise<string[]> => {
   const startUrl = normalizeUrl(request.url)
   const headers: HeadersInit = request.bearerToken
     ? { Authorization: `Bearer ${request.bearerToken}` }
@@ -1339,14 +1341,61 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
     const severityTotal = Math.max(1, severity.high + severity.medium + severity.low)
     const highPercent = Number(((severity.high / severityTotal) * 100).toFixed(2))
     const mediumPercent = Number(((severity.medium / severityTotal) * 100).toFixed(2))
+    const lowPercent = Number((100 - highPercent - mediumPercent).toFixed(2))
+
+    const buildSeverityDonut = (): string => {
+      const segments = [
+        { key: 'high', color: '#dc2626', value: severity.high, percent: highPercent },
+        { key: 'medium', color: '#f59e0b', value: severity.medium, percent: mediumPercent },
+        { key: 'low', color: '#16a34a', value: severity.low, percent: lowPercent },
+      ]
+      const ordered = [...segments].sort((left, right) => right.value - left.value)
+      const radius = 42
+      const circumference = 2 * Math.PI * radius
+      const gap = 6
+      let offset = 0
+
+      const rings = ordered
+        .map((segment) => {
+          const segmentLength = (segment.percent / 100) * circumference
+          const visibleLength = Math.max(0, segmentLength - gap)
+          const markup = `<circle class="severity-segment severity-${segment.key}" cx="50" cy="50" r="${radius}" fill="none" stroke="${segment.color}" stroke-width="16" stroke-linecap="round" stroke-dasharray="${visibleLength} ${Math.max(0, circumference - visibleLength)}" stroke-dashoffset="${-offset}" transform="rotate(-90 50 50)">
+            <title>${segment.percent.toFixed(1)}% (${segment.value})</title>
+          </circle>`
+          offset += segmentLength
+          return markup
+        })
+        .join('')
+
+      return `<div class="severity-chart" role="img" aria-label="${labels.severitySplit}: ${labels.impactHigh} ${highPercent}%, ${labels.impactMedium} ${mediumPercent}%, ${labels.impactLow} ${lowPercent}%">
+        <svg class="severity-svg" viewBox="0 0 100 100" aria-hidden="true">
+          <circle cx="50" cy="50" r="${radius}" fill="none" stroke="#e2e8f0" stroke-width="16"></circle>
+          ${rings}
+        </svg>
+        <div class="severity-center">
+          <b>${findings}</b>
+          <span>${labels.findings}</span>
+        </div>
+      </div>`
+    }
 
     const topActions = localizedResults
       .flatMap((item) => item.localized.actions)
       .filter((value, index, source) => source.indexOf(value) === index)
       .slice(0, 3)
 
+    const getPageAnchor = (index: number): string => `page-${lang}-${index + 1}`
+    const pageIndex = localizedResults
+      .map(({ result }, index) => {
+        const displayUrl =
+          result.pageUrl.length > 92 ? `${result.pageUrl.slice(0, 91)}...` : result.pageUrl
+        return `<li><a href="#${getPageAnchor(index)}">${index + 1}. ${displayUrl}</a></li>`
+      })
+      .join('')
+
     const rows = localizedResults
-      .map(({ result, localized }) => {
+      .map(({ result, localized }, index) => {
+        const pageAnchor = getPageAnchor(index)
         const comparisonStatus =
           result.comparison?.status === 'improved'
             ? labels.improved
@@ -1422,7 +1471,7 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
         })
 
         return `
-        <section class="card">
+        <section class="card" id="${pageAnchor}">
           <div class="card-head">
             <h2>${result.pageUrl}</h2>
             <span class="status ${result.comparison?.status ?? 'new'}">${comparisonStatus}</span>
@@ -1616,13 +1665,11 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
             </div>
             <div>
               <h3>${labels.severitySplit}</h3>
-              <div class="score-gauge" style="--score:100; --gauge: conic-gradient(#dc2626 0 ${highPercent}%, #f59e0b ${highPercent}% ${highPercent + mediumPercent}%, #16a34a ${highPercent + mediumPercent}% 100%); background: var(--gauge); width: 116px; height: 116px;">
-                <div class="inner" style="width: 86px; height: 86px;"><span>${findings}</span></div>
-              </div>
+              ${buildSeverityDonut()}
               <ul class="legend">
-                <li><span class="dot high"></span>${labels.impactHigh}: ${severity.high}</li>
-                <li><span class="dot medium"></span>${labels.impactMedium}: ${severity.medium}</li>
-                <li><span class="dot low"></span>${labels.impactLow}: ${severity.low}</li>
+                <li><span class="dot high"></span>${labels.impactHigh}: ${severity.high} (${highPercent}%)</li>
+                <li><span class="dot medium"></span>${labels.impactMedium}: ${severity.medium} (${mediumPercent}%)</li>
+                <li><span class="dot low"></span>${labels.impactLow}: ${severity.low} (${lowPercent}%)</li>
               </ul>
             </div>
           </div>
@@ -1648,8 +1695,11 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
                 : `<p>${labels.noData}</p>`
             }
           </div>
+          <div class="page-index">
+            <h3>${labels.pageBreakdown}</h3>
+            <ol>${pageIndex}</ol>
+          </div>
         </div>
-        <p class="meta"><b>${labels.pageBreakdown}</b></p>
         ${rows}
       </section>
     `
@@ -1687,6 +1737,11 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
       .actions { margin-top: 12px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; }
       .actions h3 { margin-top: 0; }
       .actions ol { margin: 6px 0 0 20px; padding: 0; }
+      .page-index { margin-top: 12px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; }
+      .page-index h3 { margin-top: 0; }
+      .page-index ol { margin: 6px 0 0 18px; padding: 0; display: grid; gap: 4px; }
+      .page-index a { color: #0f172a; text-decoration: none; }
+      .page-index a:hover { text-decoration: underline; }
       .card { background: #ffffff; border-radius: 12px; padding: 14px; margin-bottom: 12px; border: 1px solid #e2e8f0; }
       .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
       .status { display: inline-block; padding: 3px 8px; border-radius: 999px; font-weight: 600; font-size: 12px; }
@@ -1735,6 +1790,11 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
       .dot.high { background: #dc2626; }
       .dot.medium { background: #f59e0b; }
       .dot.low { background: #16a34a; }
+      .severity-chart { position: relative; width: 132px; height: 132px; display: inline-grid; place-items: center; margin-bottom: 6px; }
+      .severity-svg { width: 132px; height: 132px; }
+      .severity-center { position: absolute; display: grid; place-items: center; text-align: center; line-height: 1.1; }
+      .severity-center b { font-size: 22px; color: #0f172a; }
+      .severity-center span { font-size: 11px; color: #64748b; }
       .muted { color: #64748b; font-weight: 600; }
       .opportunity-item { margin-bottom: 0; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px; background: #fff; }
       .opportunity-head { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
@@ -1775,17 +1835,48 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
 }
 
 export const analyzeWebsite = async (request: AnalyzeRequest): Promise<AnalyzeResponse> => {
-  const discoveredUrls =
-    request.includeDiscoveredUrls === false
-      ? [normalizeUrl(request.url)]
-      : await discoverUrls(request)
+  const normalizedInputUrls = Array.isArray(request.urls)
+    ? [...new Set(request.urls.map((item) => normalizeUrl(item)))]
+    : []
+  const isMultiAnalysis = normalizedInputUrls.length > 0
+
+  if (isMultiAnalysis && normalizedInputUrls.length < MIN_MULTI_ANALYSIS_URLS) {
+    throw new Error(`Multi-analysis requires at least ${MIN_MULTI_ANALYSIS_URLS} URLs.`)
+  }
+
+  if (normalizedInputUrls.length > MAX_MULTI_ANALYSIS_URLS) {
+    throw new Error(`Multi-analysis supports up to ${MAX_MULTI_ANALYSIS_URLS} URLs per run.`)
+  }
+
+  let baseTargetUrl = ''
+  if (isMultiAnalysis) {
+    baseTargetUrl = normalizedInputUrls[0] ?? ''
+  } else {
+    const singleUrl = request.url?.trim()
+    if (!singleUrl) {
+      throw new Error('Single analysis requires a target URL.')
+    }
+    baseTargetUrl = normalizeUrl(singleUrl)
+  }
+
+  if (!baseTargetUrl) {
+    throw new Error('Unable to resolve base URL for analysis.')
+  }
+
+  let discoveredUrls: string[] = []
+  if (isMultiAnalysis) {
+    discoveredUrls = normalizedInputUrls
+  } else if (request.includeDiscoveredUrls === false) {
+    discoveredUrls = [baseTargetUrl]
+  } else {
+    discoveredUrls = await discoverUrls({ ...request, url: baseTargetUrl })
+  }
   const analyzedAt = new Date().toISOString()
   const reportId = getReportIdFromDate(new Date(analyzedAt))
   const results: UrlInsights[] = []
-  const history = await readHistory(request.url)
-  const previousRun: HistoricalRun | null = history.length
-    ? (history[history.length - 1] ?? null)
-    : null
+  const history = isMultiAnalysis ? [] : await readHistory(baseTargetUrl)
+  const previousRun: HistoricalRun | null =
+    history.length > 0 ? (history[history.length - 1] ?? null) : null
 
   for (const discoveredUrl of discoveredUrls) {
     const [lighthouseResult, k6Summary] = await Promise.all([
@@ -1827,7 +1918,7 @@ export const analyzeWebsite = async (request: AnalyzeRequest): Promise<AnalyzeRe
   const payload: AnalyzeResponse = {
     reportId,
     language: request.language,
-    baseUrl: request.url,
+    baseUrl: baseTargetUrl,
     discoveredUrls,
     analyzedAt,
     results: comparedResults,
@@ -1838,12 +1929,14 @@ export const analyzeWebsite = async (request: AnalyzeRequest): Promise<AnalyzeRe
   const html = buildHtmlReport(payload)
   await fs.writeFile(path.join(REPORTS_DIR, htmlFileName), html, 'utf-8')
   await cleanupOldReports()
-  await writeHistory(request.url, {
-    reportId,
-    analyzedAt: payload.analyzedAt,
-    baseUrl: request.url,
-    results: comparedResults,
-  })
+  if (!isMultiAnalysis) {
+    await writeHistory(baseTargetUrl, {
+      reportId,
+      analyzedAt: payload.analyzedAt,
+      baseUrl: baseTargetUrl,
+      results: comparedResults,
+    })
+  }
 
   return payload
 }

@@ -4,8 +4,8 @@ import { expect, test, type Page } from '@playwright/test'
  * Returns key form controls used across tests.
  */
 const getFormControls = (page: Page) => ({
-  languageEs: page.getByRole('button', { name: 'ES' }),
-  languageEn: page.getByRole('button', { name: 'EN' }),
+  languageEs: page.getByRole('button', { name: 'ES', exact: true }),
+  languageEn: page.getByRole('button', { name: 'EN', exact: true }),
   urlInput: page.getByRole('textbox', { name: /URL objetivo|Target URL/ }),
   tokenInput: page.getByRole('textbox', { name: /Bearer token/ }),
   includeDiscoveredUrlsCheckbox: page.getByRole('checkbox', {
