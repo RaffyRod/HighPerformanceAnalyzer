@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   MAX_MULTI_ANALYSIS_URLS,
-  MIN_MULTI_ANALYSIS_URLS,
   validateAndNormalizeAnalyzeRequest,
 } from '../src/utils/analyze-request'
 
@@ -46,8 +45,8 @@ describe('validateAndNormalizeAnalyzeRequest', () => {
     expect(result.payload.includeDiscoveredUrls).toBe(true)
   })
 
-  it('returns 400 when multi-analysis has less than minimum URLs', () => {
-    const urls = Array.from({ length: MIN_MULTI_ANALYSIS_URLS - 1 }, (_, index) => {
+  it('accepts multi-analysis with fewer than 20 URLs', () => {
+    const urls = Array.from({ length: 5 }, (_, index) => {
       return `https://example.com/page-${index + 1}`
     })
 
@@ -56,10 +55,9 @@ describe('validateAndNormalizeAnalyzeRequest', () => {
       language: 'en',
     })
 
-    expect(result.ok).toBe(false)
-    if (result.ok) return
-    expect(result.statusCode).toBe(400)
-    expect(result.message).toContain(`${MIN_MULTI_ANALYSIS_URLS}`)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.payload.urls).toHaveLength(5)
   })
 
   it('returns 400 when multi-analysis exceeds maximum URLs', () => {
@@ -79,7 +77,7 @@ describe('validateAndNormalizeAnalyzeRequest', () => {
   })
 
   it('normalizes valid multi-analysis and forces includeDiscoveredUrls false', () => {
-    const urls = Array.from({ length: MIN_MULTI_ANALYSIS_URLS }, (_, index) => {
+    const urls = Array.from({ length: MAX_MULTI_ANALYSIS_URLS }, (_, index) => {
       return `https://example.com/page-${index + 1}`
     })
 
@@ -96,7 +94,7 @@ describe('validateAndNormalizeAnalyzeRequest', () => {
 
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    expect(result.payload.urls?.length).toBe(MIN_MULTI_ANALYSIS_URLS)
+    expect(result.payload.urls?.length).toBe(MAX_MULTI_ANALYSIS_URLS)
     expect(result.payload.urls?.[1]).toBe('https://example.com/page-2')
     expect(result.payload.includeDiscoveredUrls).toBe(false)
   })

@@ -9,6 +9,7 @@ import AnalysisResults from './components/AnalysisResults.vue'
 const { t, locale } = useI18n()
 const SAVED_URLS_STORAGE_KEY = 'hpa-saved-urls'
 const MAX_SAVED_URLS = 10
+const MAX_MULTI_ANALYSIS_URLS = 20
 
 const form = reactive({
   url: '',
@@ -147,6 +148,14 @@ const parseMultiUrls = (): string[] =>
     .map((item) => item.trim())
     .filter((item) => item.length > 0)
 
+const setUrlsBatchText = (value: string): void => {
+  const normalizedUrls = value
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+  form.urlsBatchText = normalizedUrls.slice(0, MAX_MULTI_ANALYSIS_URLS).join('\n')
+}
+
 const normalizeSavedUrl = (value: string): string => {
   const trimmed = value.trim()
   if (!trimmed) return ''
@@ -187,8 +196,8 @@ const runAnalysis = async (): Promise<void> => {
   const multiUrls = isMultiAnalysis ? parseMultiUrls() : []
 
   if (isMultiAnalysis) {
-    if (multiUrls.length < 20) {
-      errorMessage.value = t('multiMinUrlsError')
+    if (multiUrls.length > MAX_MULTI_ANALYSIS_URLS) {
+      errorMessage.value = t('multiMaxUrlsError')
       return
     }
     const hasInvalidUrl = multiUrls.some((item) => {
@@ -336,7 +345,7 @@ onUnmounted(() => {
       :saved-urls="savedUrls"
       @submit="runAnalysis"
       @update:url="form.url = $event"
-      @update:urls-batch-text="form.urlsBatchText = $event"
+      @update:urls-batch-text="setUrlsBatchText"
       @update:bearer-token="form.bearerToken = $event"
       @update:include-discovered-urls="form.includeDiscoveredUrls = $event"
       @update:language="setLanguage"

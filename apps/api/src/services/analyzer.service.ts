@@ -31,8 +31,7 @@ interface LighthouseAudit {
 }
 
 const MAX_URLS = 5
-const MIN_MULTI_ANALYSIS_URLS = 20
-const MAX_MULTI_ANALYSIS_URLS = 200
+const MAX_MULTI_ANALYSIS_URLS = 20
 const MAX_REPORT_FILES = 5
 const CURRENT_FILE_DIR = path.dirname(fileURLToPath(import.meta.url))
 const resolveProjectRoot = (): string => {
@@ -1839,10 +1838,6 @@ export const analyzeWebsite = async (request: AnalyzeRequest): Promise<AnalyzeRe
     ? [...new Set(request.urls.map((item) => normalizeUrl(item)))]
     : []
   const isMultiAnalysis = normalizedInputUrls.length > 0
-
-  if (isMultiAnalysis && normalizedInputUrls.length < MIN_MULTI_ANALYSIS_URLS) {
-    throw new Error(`Multi-analysis requires at least ${MIN_MULTI_ANALYSIS_URLS} URLs.`)
-  }
 
   if (normalizedInputUrls.length > MAX_MULTI_ANALYSIS_URLS) {
     throw new Error(`Multi-analysis supports up to ${MAX_MULTI_ANALYSIS_URLS} URLs per run.`)

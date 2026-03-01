@@ -5,6 +5,7 @@ High Performance Analyzer is a TypeScript monorepo that audits website performan
 ## ✨ Why This Project
 
 - 🌐 Analyze one URL or discovered internal URLs (same origin)
+- 🧩 Run multi-analysis with up to 20 URLs in one batch report
 - ⚡ Measure key performance vitals (FCP, LCP, TTI, payload)
 - 📡 Evaluate request latency and failure behavior with k6 (or safe fallback)
 - 🌍 Use bilingual UX/reporting (`en` / `es`)
@@ -75,6 +76,16 @@ Sample payload:
 
 Note: if `language` is omitted, analysis defaults to `en`.
 
+Multi-analysis payload (up to 20 URLs):
+
+```json
+{
+  "urls": ["https://example.com/page-1", "https://example.com/page-2"],
+  "bearerToken": "optional-token",
+  "language": "en"
+}
+```
+
 ## 🧱 Project Structure
 
 ```text
@@ -116,6 +127,7 @@ Diagnostics:
 - Husky + lint-staged
 - Vitest (API unit tests)
 - Playwright (Web E2E smoke tests)
+- GitHub Actions: API unit tests on every PR commit and every push to `ci` branch
 
 ## 🆘 Troubleshooting
 

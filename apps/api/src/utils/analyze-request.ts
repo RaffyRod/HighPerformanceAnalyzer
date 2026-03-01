@@ -1,7 +1,6 @@
 import type { AnalyzeRequest, LanguageCode } from '@hpa/shared'
 
-export const MIN_MULTI_ANALYSIS_URLS = 20
-export const MAX_MULTI_ANALYSIS_URLS = 200
+export const MAX_MULTI_ANALYSIS_URLS = 20
 
 type ValidationError = {
   ok: false
@@ -30,14 +29,6 @@ export const validateAndNormalizeAnalyzeRequest = (
       ok: false,
       statusCode: 400,
       message: 'url is required for single analysis',
-    }
-  }
-
-  if (isMultiAnalysis && uniqueUrls.length < MIN_MULTI_ANALYSIS_URLS) {
-    return {
-      ok: false,
-      statusCode: 400,
-      message: `multi-analysis requires at least ${MIN_MULTI_ANALYSIS_URLS} URLs`,
     }
   }
 
