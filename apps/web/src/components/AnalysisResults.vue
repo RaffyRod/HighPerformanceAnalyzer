@@ -80,6 +80,8 @@ const scoreSummary = (() => {
     props.report.results.length
   return Number((average * 100).toFixed(0))
 })()
+
+const hasAnyApiChecks = props.report.results.some((result) => result.apiChecks.length > 0)
 </script>
 
 <template>
@@ -87,7 +89,11 @@ const scoreSummary = (() => {
     <div class="report-head panel">
       <div class="report-title-row">
         <h2>{{ t('report') }}</h2>
-        <span class="score-pill" :class="scoreClass(scoreSummary / 100)">
+        <span
+          v-if="report.results.length > 1"
+          class="score-pill"
+          :class="scoreClass(scoreSummary / 100)"
+        >
           {{ t('performance') }} {{ scoreSummary }}%
         </span>
       </div>
@@ -110,7 +116,11 @@ const scoreSummary = (() => {
     <article v-for="result in report.results" :key="result.pageUrl" class="result">
       <div class="result-head">
         <h3>{{ result.pageUrl }}</h3>
-        <span class="score-pill" :class="scoreClass(result.performanceScore)">
+        <span
+          v-if="report.results.length > 1"
+          class="score-pill"
+          :class="scoreClass(result.performanceScore)"
+        >
           {{ t('performance') }} {{ Math.round(result.performanceScore * 100) }}%
         </span>
       </div>
@@ -142,10 +152,10 @@ const scoreSummary = (() => {
         </div>
       </div>
 
-      <p>
+      <p v-if="hasAnyApiChecks">
         <strong>{{ t('apiChecksTitle') }}:</strong>
       </p>
-      <ul class="result-list opportunity-list">
+      <ul v-if="result.apiChecks.length > 0" class="result-list opportunity-list">
         <li v-for="apiCheck in result.apiChecks" :key="apiCheck.method + apiCheck.url">
           <div class="opportunity-head">
             <strong>{{ apiCheck.name }}</strong>
@@ -169,7 +179,6 @@ const scoreSummary = (() => {
             </span>
           </div>
         </li>
-        <li v-if="!result.apiChecks.length">{{ t('apiChecksNoData') }}</li>
       </ul>
 
       <p>
@@ -236,29 +245,34 @@ const scoreSummary = (() => {
 
 <style scoped>
 .report-head {
-  margin-bottom: 14px;
+  margin-bottom: 10px;
+  padding: 12px 14px;
 }
 
 .report-title-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .report-meta {
   display: flex;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
   align-items: center;
+}
+
+.report-meta p {
+  margin: 0;
 }
 
 .report-link-cta {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
+  gap: 6px;
+  padding: 8px 12px;
   border-radius: 10px;
   border: 1px solid #0f172a;
   background: #0f172a;
@@ -282,41 +296,41 @@ const scoreSummary = (() => {
 .result-head {
   display: flex;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   align-items: flex-start;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 
 .metric-item {
   border: 1px solid #e2e8f0;
   border-radius: 10px;
-  padding: 8px;
+  padding: 6px 8px;
   background: #f8fafc;
 }
 
 .metric-item span {
   display: block;
   color: #64748b;
-  font-size: 0.8rem;
+  font-size: 0.76rem;
 }
 
 .metric-item strong {
   color: #0f172a;
-  font-size: 0.92rem;
+  font-size: 0.86rem;
 }
 
 .score-pill {
   border-radius: 999px;
   font-weight: 700;
-  font-size: 0.82rem;
-  padding: 4px 10px;
+  font-size: 0.78rem;
+  padding: 3px 9px;
   border: 1px solid transparent;
 }
 
@@ -339,9 +353,9 @@ const scoreSummary = (() => {
 }
 
 .result-list {
-  margin-top: 6px;
+  margin-top: 4px;
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .result-list li {
@@ -357,14 +371,14 @@ const scoreSummary = (() => {
   list-style: none;
   padding-left: 0;
   display: grid;
-  gap: 10px;
+  gap: 8px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .opportunity-list li {
   border: 1px solid #e2e8f0;
   border-radius: 10px;
-  padding: 8px 10px;
+  padding: 7px 9px;
   background: #fff;
   margin: 0;
 }
@@ -377,9 +391,13 @@ const scoreSummary = (() => {
 }
 
 .opportunity-detail {
-  margin-top: 4px;
+  margin-top: 3px;
   color: #475569;
-  font-size: 0.88rem;
+  font-size: 0.82rem;
+}
+
+.result p {
+  margin: 6px 0 2px;
 }
 
 .current-value.failed {
@@ -399,6 +417,10 @@ const scoreSummary = (() => {
 }
 
 @media (max-width: 768px) {
+  .report-head {
+    padding: 10px 12px;
+  }
+
   .metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -409,6 +431,10 @@ const scoreSummary = (() => {
 }
 
 @media (max-width: 480px) {
+  .report-head {
+    padding: 10px;
+  }
+
   .metric-grid {
     grid-template-columns: 1fr;
   }
