@@ -1,10 +1,12 @@
 import type { ApiCheckRequest, ApiCheckResult, LanguageCode, UrlInsights } from '@hpa/shared'
+import { load } from 'cheerio'
 import { t } from './i18n.js'
 
 export const API_CHECK_P95_THRESHOLD_MS = 1200
 export const API_CHECK_FAIL_RATE_THRESHOLD_PERCENT = 1
 
 const HTTP_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
+const DISCOVERABLE_API_PREFIXES = ['/api/', '/graphql', '/rest/']
 
 export interface NormalizedApiCheck {
   name: string
@@ -18,6 +20,145 @@ const normalizeUrl = (rawUrl: string): string => {
   const parsed = new URL(rawUrl)
   parsed.hash = ''
   return parsed.toString()
+}
+
+const isDiscoverableApiUrl = (parsedUrl: URL): boolean => {
+  const pathname = parsedUrl.pathname.toLowerCase()
+  return DISCOVERABLE_API_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+}
+
+const normalizeDiscoveredUrl = (rawUrl: string, baseUrl: URL): string | null => {
+  try {
+    const parsed = new URL(rawUrl, baseUrl)
+    if (parsed.origin !== baseUrl.origin) return null
+    if (!isDiscoverableApiUrl(parsed)) return null
+    parsed.hash = ''
+    return parsed.toString()
+  } catch {
+    return null
+  }
+}
+
+const inferMethodFromFetchOptions = (rawOptions: string): NormalizedApiCheck['method'] => {
+  const methodMatch = rawOptions.match(/method\s*:\s*['"]([A-Za-z]+)['"]/)
+  const parsed = methodMatch?.[1]?.toUpperCase()
+  if (parsed && HTTP_METHODS.has(parsed)) {
+    return parsed as NormalizedApiCheck['method']
+  }
+  return 'GET'
+}
+
+const parseFormMethod = (rawMethod: string | undefined): NormalizedApiCheck['method'] => {
+  const parsed = (rawMethod ?? 'GET').toUpperCase()
+  if (parsed === 'POST') return 'POST'
+  return 'GET'
+}
+
+export const discoverApiChecksFromHtml = (
+  basePageUrl: string,
+  html: string,
+  bearerToken?: string,
+): NormalizedApiCheck[] => {
+  const baseUrl = new URL(basePageUrl)
+  const $ = load(html)
+  const discovered = new Map<string, NormalizedApiCheck>()
+  const headers: Record<string, string> = {}
+  if (bearerToken) {
+    headers.Authorization = `Bearer ${bearerToken}`
+  }
+
+  const addCheck = (rawUrl: string, method: NormalizedApiCheck['method']): void => {
+    const normalizedUrl = normalizeDiscoveredUrl(rawUrl, baseUrl)
+    if (!normalizedUrl) return
+    const key = `${method} ${normalizedUrl}`
+    if (discovered.has(key)) return
+    discovered.set(key, {
+      name: `Auto API ${discovered.size + 1}`,
+      url: normalizedUrl,
+      method,
+      headers,
+    })
+  }
+
+  const fetchRegex = /fetch\(\s*['"`]([^'"`]+)['"`]\s*(?:,\s*\{([\s\S]*?)\})?\s*\)/g
+  const axiosMethodRegex = /axios\.(get|post|put|patch|delete)\(\s*['"`]([^'"`]+)['"`]/gi
+  const axiosRequestRegex =
+    /axios\(\s*\{[\s\S]*?url\s*:\s*['"`]([^'"`]+)['"`][\s\S]*?(?:method\s*:\s*['"`]([A-Za-z]+)['"`])?[\s\S]*?\}\s*\)/gi
+
+  $('form[action]').each((_, element) => {
+    const action = $(element).attr('action')
+    if (!action) return
+    addCheck(action, parseFormMethod($(element).attr('method')))
+  })
+
+  $('[data-api],[data-endpoint]').each((_, element) => {
+    const value = $(element).attr('data-api') ?? $(element).attr('data-endpoint')
+    if (!value) return
+    addCheck(value, 'GET')
+  })
+
+  $('script').each((_, element) => {
+    const script = $(element).html() ?? ''
+    if (!script) return
+
+    for (const match of script.matchAll(fetchRegex)) {
+      const rawUrl = match[1]
+      if (!rawUrl) continue
+      const method = inferMethodFromFetchOptions(match[2] ?? '')
+      addCheck(rawUrl, method)
+    }
+
+    for (const match of script.matchAll(axiosMethodRegex)) {
+      const rawMethod = match[1]
+      const rawUrl = match[2]
+      if (!rawMethod || !rawUrl) continue
+      const method = rawMethod.toUpperCase()
+      if (!HTTP_METHODS.has(method)) continue
+      addCheck(rawUrl, method as NormalizedApiCheck['method'])
+    }
+
+    for (const match of script.matchAll(axiosRequestRegex)) {
+      const rawUrl = match[1]
+      if (!rawUrl) continue
+      const parsedMethod = (match[2] ?? 'GET').toUpperCase()
+      const method = HTTP_METHODS.has(parsedMethod)
+        ? (parsedMethod as NormalizedApiCheck['method'])
+        : 'GET'
+      addCheck(rawUrl, method)
+    }
+  })
+
+  return [...discovered.values()].slice(0, 20)
+}
+
+export const discoverApiChecksFromPage = async (
+  pageUrl: string,
+  bearerToken?: string,
+): Promise<NormalizedApiCheck[]> => {
+  const headers: HeadersInit = bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}
+  try {
+    const response = await fetch(pageUrl, {
+      headers,
+      signal: AbortSignal.timeout(15000),
+    })
+    if (!response.ok) return []
+    const html = await response.text()
+    return discoverApiChecksFromHtml(pageUrl, html, bearerToken)
+  } catch {
+    return []
+  }
+}
+
+export const mergeApiChecks = (
+  discoveredChecks: NormalizedApiCheck[],
+  userChecks: NormalizedApiCheck[],
+): NormalizedApiCheck[] => {
+  const merged = new Map<string, NormalizedApiCheck>()
+  for (const check of [...discoveredChecks, ...userChecks]) {
+    const key = `${check.method} ${check.url}`
+    if (!merged.has(key)) merged.set(key, check)
+  }
+  return [...merged.values()].slice(0, 50)
 }
 
 export const normalizeApiChecks = (

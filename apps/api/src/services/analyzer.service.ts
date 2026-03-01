@@ -16,7 +16,9 @@ import type {
 import { t } from '../utils/i18n.js'
 import {
   buildApiCheckFindings,
+  discoverApiChecksFromPage,
   mapApiCheckMetrics,
+  mergeApiChecks,
   normalizeApiChecks,
   type NormalizedApiCheck,
 } from '../utils/api-checks.js'
@@ -1411,6 +1413,16 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
     return `${ratio > 0 ? '+' : ''}${Math.round(ratio * 100)}%`
   }
 
+  const formatAnalyzedAtLabel = (isoDate: string, lang: LanguageCode): string => {
+    const parsed = new Date(isoDate)
+    if (Number.isNaN(parsed.getTime())) return isoDate
+    return new Intl.DateTimeFormat(lang === 'es' ? 'es-ES' : 'en-US', {
+      dateStyle: 'medium',
+      timeStyle: 'medium',
+      hour12: false,
+    }).format(parsed)
+  }
+
   const buildLanguageSection = (lang: LanguageCode): string => {
     const labels = labelsByLanguage[lang]
     const localizedResults = payload.results.map((result) => ({
@@ -1753,7 +1765,7 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
         <h1>${labels.title}</h1>
         <p class="meta">${labels.subtitle}</p>
         <div class="hero">
-          <p class="meta">${labels.baseUrlLabel}: ${payload.baseUrl} | ${labels.analyzedAt}: ${payload.analyzedAt}</p>
+          <p class="meta">${labels.baseUrlLabel}: ${payload.baseUrl} | ${labels.analyzedAt}: ${formatAnalyzedAtLabel(payload.analyzedAt, lang)}</p>
           <div class="overview">
             <div class="score-gauge ${overallScoreClass}" style="--score:${averageScorePercent}; --gauge:${
               overallScoreClass === 'good'
@@ -1979,9 +1991,11 @@ export const analyzeWebsite = async (request: AnalyzeRequest): Promise<AnalyzeRe
   const history = isMultiAnalysis ? [] : await readHistory(baseTargetUrl)
   const previousRun: HistoricalRun | null =
     history.length > 0 ? (history[history.length - 1] ?? null) : null
+  const userApiChecks = normalizeApiChecks(request.apiChecks, request.bearerToken)
 
   for (const discoveredUrl of discoveredUrls) {
-    const normalizedApiChecks = normalizeApiChecks(request.apiChecks, request.bearerToken)
+    const discoveredApiChecks = await discoverApiChecksFromPage(discoveredUrl, request.bearerToken)
+    const normalizedApiChecks = mergeApiChecks(discoveredApiChecks, userApiChecks)
     const [lighthouseResult, k6Summary] = await Promise.all([
       runLighthouse(discoveredUrl),
       runK6(discoveredUrl, request.bearerToken, normalizedApiChecks),
