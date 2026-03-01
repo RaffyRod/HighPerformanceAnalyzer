@@ -1,8 +1,27 @@
 export type LanguageCode = 'en' | 'es'
 
+export interface ApiCheckRequest {
+  name?: string
+  url: string
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  headers?: Record<string, string>
+  body?: string
+}
+
+export interface ApiCheckResult {
+  name: string
+  url: string
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  callTimeAvgMs: number | null
+  callTimeP95Ms: number | null
+  callsFailedRate: number | null
+  status: 'pass' | 'fail'
+}
+
 export interface AnalyzeRequest {
   url?: string
   urls?: string[]
+  apiChecks?: ApiCheckRequest[]
   bearerToken?: string
   language: LanguageCode
   includeDiscoveredUrls?: boolean
@@ -20,6 +39,7 @@ export interface UrlInsights {
   callTimeAvgMs: number | null
   callTimeP95Ms: number | null
   callsFailedRate: number | null
+  apiChecks: ApiCheckResult[]
   issues: string[]
   suggestions: string[]
   finalScreenshotDataUrl: string | null

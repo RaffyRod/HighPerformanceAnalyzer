@@ -98,4 +98,41 @@ describe('validateAndNormalizeAnalyzeRequest', () => {
     expect(result.payload.urls?.[1]).toBe('https://example.com/page-2')
     expect(result.payload.includeDiscoveredUrls).toBe(false)
   })
+
+  it('normalizes api checks from request payload', () => {
+    const result = validateAndNormalizeAnalyzeRequest({
+      url: 'https://example.com',
+      language: 'en',
+      apiChecks: [
+        {
+          name: 'Users',
+          url: 'https://example.com/api/users',
+          method: 'get',
+        },
+      ],
+      bearerToken: 'token-123',
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.payload.apiChecks?.[0]?.method).toBe('GET')
+    expect(result.payload.apiChecks?.[0]?.headers?.Authorization).toBe('Bearer token-123')
+  })
+
+  it('returns 400 for invalid api check method', () => {
+    const result = validateAndNormalizeAnalyzeRequest({
+      url: 'https://example.com',
+      language: 'en',
+      apiChecks: [
+        {
+          url: 'https://example.com/api/users',
+          method: 'OPTIONS' as never,
+        },
+      ],
+    })
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.statusCode).toBe(400)
+  })
 })

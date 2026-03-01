@@ -6,8 +6,20 @@ import os from 'node:os'
 import path from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import type { AnalyzeRequest, AnalyzeResponse, UrlInsights, LanguageCode } from '@hpa/shared'
+import type {
+  AnalyzeRequest,
+  AnalyzeResponse,
+  UrlInsights,
+  LanguageCode,
+  ApiCheckResult,
+} from '@hpa/shared'
 import { t } from '../utils/i18n.js'
+import {
+  buildApiCheckFindings,
+  mapApiCheckMetrics,
+  normalizeApiChecks,
+  type NormalizedApiCheck,
+} from '../utils/api-checks.js'
 
 interface K6Summary {
   metrics?: Record<
@@ -396,16 +408,22 @@ const runLighthouse = async (
   }
 }
 
-const runK6Binary = async (url: string, bearerToken?: string): Promise<K6Summary> => {
+const runK6Binary = async (
+  url: string,
+  bearerToken: string | undefined,
+  apiChecks: NormalizedApiCheck[],
+): Promise<K6Summary> => {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'hpa-k6-'))
   const scriptPath = path.join(tempDir, 'script.js')
   const summaryPath = path.join(tempDir, 'summary.json')
   const targetUrlLiteral = JSON.stringify(url)
   const bearerTokenLiteral = JSON.stringify(bearerToken ?? '')
+  const apiChecksLiteral = JSON.stringify(apiChecks)
 
   const k6Script = `
 import http from 'k6/http'
 import { check, sleep } from 'k6'
+import { Trend, Rate } from 'k6/metrics'
 
 export const options = {
   vus: 5,
@@ -418,11 +436,24 @@ export const options = {
 
 const TARGET_URL = ${targetUrlLiteral}
 const BEARER_TOKEN = ${bearerTokenLiteral}
+const API_CHECKS = ${apiChecksLiteral}
+const apiDurationMetrics = API_CHECKS.map((_, index) => new Trend('api_check_' + index + '_duration'))
+const apiFailedMetrics = API_CHECKS.map((_, index) => new Rate('api_check_' + index + '_failed'))
 
 export default function() {
   const headers = BEARER_TOKEN ? { Authorization: 'Bearer ' + BEARER_TOKEN } : {}
   const response = http.get(TARGET_URL, { headers })
   check(response, { 'status is 200': (r) => r.status >= 200 && r.status < 400 })
+
+  for (let index = 0; index < API_CHECKS.length; index += 1) {
+    const apiCheck = API_CHECKS[index]
+    const response = http.request(apiCheck.method, apiCheck.url, apiCheck.body || null, {
+      headers: apiCheck.headers || headers,
+    })
+    apiDurationMetrics[index].add(response.timings.duration)
+    apiFailedMetrics[index].add(response.status >= 400 || response.error)
+  }
+
   sleep(0.5)
 }
 `
@@ -468,7 +499,11 @@ export default function() {
   }
 }
 
-const runFallbackLoadTest = async (url: string, bearerToken?: string): Promise<K6Summary> => {
+const runFallbackLoadTest = async (
+  url: string,
+  bearerToken: string | undefined,
+  apiChecks: NormalizedApiCheck[],
+): Promise<K6Summary> => {
   const headers: HeadersInit = bearerToken ? { Authorization: `Bearer ${bearerToken}` } : {}
   const durationsMs: number[] = []
   let failedCount = 0
@@ -511,6 +546,39 @@ const runFallbackLoadTest = async (url: string, bearerToken?: string): Promise<K
   const p95Index = Math.max(0, Math.ceil(sortedDurations.length * 0.95) - 1)
   const p95 = sortedDurations[p95Index] ?? 0
 
+  const apiCheckResults = await Promise.all(
+    apiChecks.map(async (apiCheck, index) => {
+      const startedAt = Date.now()
+      let failed = 0
+      try {
+        const response = await fetch(apiCheck.url, {
+          method: apiCheck.method,
+          headers: apiCheck.headers,
+          body: apiCheck.body,
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        })
+        if (!response.ok) failed = 1
+      } catch {
+        failed = 1
+      }
+      const elapsed = Date.now() - startedAt
+      return {
+        index,
+        elapsed,
+        failed,
+      }
+    }),
+  )
+  const apiMetricsEntries = apiCheckResults.map((item) => {
+    return [
+      `api_check_${item.index}_duration`,
+      { avg: Number(item.elapsed.toFixed(2)), 'p(95)': Number(item.elapsed.toFixed(2)) },
+    ] as const
+  })
+  const apiFailedEntries = apiCheckResults.map((item) => {
+    return [`api_check_${item.index}_failed`, { rate: item.failed }] as const
+  })
+
   return {
     metrics: {
       http_req_duration: {
@@ -520,25 +588,32 @@ const runFallbackLoadTest = async (url: string, bearerToken?: string): Promise<K
       http_req_failed: {
         rate: Number((failedCount / FALLBACK_REQUESTS).toFixed(4)),
       },
+      ...Object.fromEntries(apiMetricsEntries),
+      ...Object.fromEntries(apiFailedEntries),
     },
   }
 }
 
-const runK6 = async (url: string, bearerToken?: string): Promise<K6Summary> => {
+const runK6 = async (
+  url: string,
+  bearerToken: string | undefined,
+  apiChecks: NormalizedApiCheck[],
+): Promise<K6Summary> => {
   const k6Ready = await ensureK6Ready()
 
   if (k6Ready) {
-    return runK6Binary(url, bearerToken)
+    return runK6Binary(url, bearerToken, apiChecks)
   }
 
   console.warn('k6 is unavailable. Falling back to internal HTTP load probe.')
-  return runFallbackLoadTest(url, bearerToken)
+  return runFallbackLoadTest(url, bearerToken, apiChecks)
 }
 
 const evaluateViolations = (
   lang: LanguageCode,
   lighthouseResult: Awaited<ReturnType<typeof runLighthouse>>,
   k6Summary: K6Summary,
+  apiChecks: ApiCheckResult[],
 ): {
   issues: string[]
   suggestions: string[]
@@ -706,6 +781,13 @@ const evaluateViolations = (
 
   for (const lhSuggestion of lighthouseResult.lighthouseSuggestions) {
     suggestions.add(lhSuggestion)
+  }
+
+  const apiFindings = buildApiCheckFindings(lang, apiChecks)
+  issues.push(...apiFindings.issues)
+  rootCauses.push(...apiFindings.rootCauses)
+  for (const suggestion of apiFindings.suggestions) {
+    suggestions.add(suggestion)
   }
 
   return {
@@ -877,6 +959,10 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
       opportunityGood: string
       opportunityNeedsWork: string
       opportunityCritical: string
+      apiChecks: string
+      apiChecksP95: string
+      apiChecksFailRate: string
+      apiChecksNoData: string
       executiveSummary: string
       overallStatus: string
       targetLabel: string
@@ -935,6 +1021,10 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
       opportunityGood: 'Bien',
       opportunityNeedsWork: 'Mejorable',
       opportunityCritical: 'Critico',
+      apiChecks: 'Verificaciones API',
+      apiChecksP95: 'p95',
+      apiChecksFailRate: 'Tasa de falla',
+      apiChecksNoData: 'No hay verificaciones API configuradas',
       executiveSummary: 'Resumen ejecutivo',
       overallStatus: 'Estado general',
       targetLabel: 'Objetivo',
@@ -992,6 +1082,10 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
       opportunityGood: 'Good',
       opportunityNeedsWork: 'Needs work',
       opportunityCritical: 'Critical',
+      apiChecks: 'API checks',
+      apiChecksP95: 'p95',
+      apiChecksFailRate: 'Fail rate',
+      apiChecksNoData: 'No API checks configured',
       executiveSummary: 'Executive summary',
       overallStatus: 'Overall status',
       targetLabel: 'Target',
@@ -1611,6 +1705,19 @@ const buildHtmlReport = (payload: AnalyzeResponse): string => {
               <li>${labels.callsP95Label}: <b>${result.callTimeP95Ms ?? 'N/A'} ms</b></li>
               <li>${labels.failureRateLabel}: <b>${result.callsFailedRate ?? 'N/A'}%</b></li>
             </ul>
+            <h3>${labels.apiChecks}</h3>
+            <ul>
+              ${
+                result.apiChecks.length
+                  ? result.apiChecks
+                      .map((item) => {
+                        const status = item.status === 'pass' ? '✅' : '❌'
+                        return `<li><b>${item.name}</b> (${item.method}) — ${labels.apiChecksP95}: ${item.callTimeP95Ms ?? 'N/A'} ms | ${labels.apiChecksFailRate}: ${item.callsFailedRate ?? 'N/A'}% ${status}</li>`
+                      })
+                      .join('')
+                  : `<li>${labels.apiChecksNoData}</li>`
+              }
+            </ul>
             <h3>${labels.causes}</h3>
             <ul>
               ${
@@ -1874,14 +1981,17 @@ export const analyzeWebsite = async (request: AnalyzeRequest): Promise<AnalyzeRe
     history.length > 0 ? (history[history.length - 1] ?? null) : null
 
   for (const discoveredUrl of discoveredUrls) {
+    const normalizedApiChecks = normalizeApiChecks(request.apiChecks, request.bearerToken)
     const [lighthouseResult, k6Summary] = await Promise.all([
       runLighthouse(discoveredUrl),
-      runK6(discoveredUrl, request.bearerToken),
+      runK6(discoveredUrl, request.bearerToken, normalizedApiChecks),
     ])
+    const apiChecks = mapApiCheckMetrics(normalizedApiChecks, k6Summary.metrics)
     const { issues, suggestions, rootCauses, k6Metrics } = evaluateViolations(
       request.language,
       lighthouseResult,
       k6Summary,
+      apiChecks,
     )
 
     results.push({
@@ -1896,6 +2006,7 @@ export const analyzeWebsite = async (request: AnalyzeRequest): Promise<AnalyzeRe
       callTimeAvgMs: k6Metrics.callTimeAvgMs,
       callTimeP95Ms: k6Metrics.callTimeP95Ms,
       callsFailedRate: k6Metrics.callsFailedRate,
+      apiChecks,
       issues,
       suggestions,
       finalScreenshotDataUrl: lighthouseResult.finalScreenshotDataUrl,

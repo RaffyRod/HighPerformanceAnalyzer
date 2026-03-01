@@ -6,6 +6,7 @@ High Performance Analyzer is a TypeScript monorepo that audits website performan
 
 - 🌐 Analyze one URL or discovered internal URLs (same origin)
 - 🧩 Run multi-analysis with up to 20 URLs in one batch report
+- 🔌 Complement page analysis with optional API endpoint checks (`apiChecks`) powered by k6
 - ⚡ Measure key performance vitals (FCP, LCP, TTI, payload)
 - 📡 Evaluate request latency and failure behavior with k6 (or safe fallback)
 - 🌍 Use bilingual UX/reporting (`en` / `es`)
@@ -85,6 +86,33 @@ Multi-analysis payload (up to 20 URLs):
   "language": "en"
 }
 ```
+
+API checks payload (complements existing page analysis):
+
+```json
+{
+  "url": "https://example.com",
+  "language": "en",
+  "apiChecks": [
+    {
+      "name": "Users API",
+      "url": "https://example.com/api/users",
+      "method": "GET"
+    },
+    {
+      "name": "Orders API",
+      "url": "https://example.com/api/orders",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": "{\"limit\":20}"
+    }
+  ]
+}
+```
+
+When `apiChecks` is provided, the analyzer still runs Lighthouse + page-level k6 and adds per-endpoint API metrics (`p95`, failure rate, pass/fail) to the final report.
 
 ## 🧱 Project Structure
 

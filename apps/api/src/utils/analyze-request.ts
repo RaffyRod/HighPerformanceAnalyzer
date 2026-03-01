@@ -1,4 +1,5 @@
 import type { AnalyzeRequest, LanguageCode } from '@hpa/shared'
+import { normalizeApiChecks } from './api-checks.js'
 
 export const MAX_MULTI_ANALYSIS_URLS = 20
 
@@ -41,12 +42,24 @@ export const validateAndNormalizeAnalyzeRequest = (
   }
 
   const language: LanguageCode = body?.language === 'es' ? 'es' : 'en'
+  let apiChecks = undefined
+  try {
+    const normalizedChecks = normalizeApiChecks(body?.apiChecks, body?.bearerToken?.trim())
+    apiChecks = normalizedChecks.length ? normalizedChecks : undefined
+  } catch (error) {
+    return {
+      ok: false,
+      statusCode: 400,
+      message: error instanceof Error ? error.message : 'Invalid API checks payload',
+    }
+  }
 
   return {
     ok: true,
     payload: {
       url: body?.url?.trim() || undefined,
       urls: isMultiAnalysis ? uniqueUrls : undefined,
+      apiChecks,
       bearerToken: body?.bearerToken?.trim() || undefined,
       language,
       includeDiscoveredUrls: isMultiAnalysis ? false : body?.includeDiscoveredUrls !== false,

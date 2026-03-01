@@ -143,6 +143,36 @@ const scoreSummary = (() => {
       </div>
 
       <p>
+        <strong>{{ t('apiChecksTitle') }}:</strong>
+      </p>
+      <ul class="result-list opportunity-list">
+        <li v-for="apiCheck in result.apiChecks" :key="apiCheck.method + apiCheck.url">
+          <div class="opportunity-head">
+            <strong>{{ apiCheck.name }}</strong>
+          </div>
+          <div class="opportunity-detail">
+            <span v-if="apiCheck.status === 'fail'">❌</span>
+            <span v-else class="pass-emoji">✅</span>
+            {{ apiCheck.method }} | {{ t('apiChecksP95') }}:
+            <span
+              class="current-value"
+              :class="{ failed: apiCheck.status === 'fail', passed: apiCheck.status === 'pass' }"
+            >
+              {{ formatMs(apiCheck.callTimeP95Ms) }}
+            </span>
+            | {{ t('apiChecksFailRate') }}:
+            <span
+              class="current-value"
+              :class="{ failed: apiCheck.status === 'fail', passed: apiCheck.status === 'pass' }"
+            >
+              {{ formatPercent(apiCheck.callsFailedRate) }}
+            </span>
+          </div>
+        </li>
+        <li v-if="!result.apiChecks.length">{{ t('apiChecksNoData') }}</li>
+      </ul>
+
+      <p>
         <strong>{{ t('issues') }}:</strong>
       </p>
       <ul class="result-list issue-list">

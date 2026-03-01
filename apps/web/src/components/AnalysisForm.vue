@@ -68,51 +68,59 @@ const formatSavedUrlLabel = (value: string): string => {
 <template>
   <section class="panel">
     <form class="form" @submit.prevent="emit('submit')">
-      <div class="toolbar">
-        <span class="toolbar-label">{{ t('language') }}</span>
-        <div class="language-toggle" role="group" :aria-label="t('language')">
-          <button
-            type="button"
-            class="toggle-btn"
-            :class="{ active: props.language === 'es' }"
-            :disabled="props.loading"
-            @click="setLanguage('es')"
-          >
-            ES
-          </button>
-          <button
-            type="button"
-            class="toggle-btn"
-            :class="{ active: props.language === 'en' }"
-            :disabled="props.loading"
-            @click="setLanguage('en')"
-          >
-            EN
-          </button>
+      <div class="toolbar toolbar-dual">
+        <div class="toolbar-left">
+          <span class="toolbar-label">{{ t('analysisMode') }}</span>
+          <div class="mode-radio-group" role="radiogroup" :aria-label="t('analysisMode')">
+            <label class="mode-radio-option">
+              <input
+                class="mode-radio-input"
+                type="radio"
+                name="analysis-mode"
+                :checked="props.analysisMode === 'single'"
+                :disabled="props.loading"
+                @change="setAnalysisMode('single')"
+              />
+              <span>{{ t('singleAnalysis') }}</span>
+            </label>
+            <label class="mode-radio-option">
+              <input
+                class="mode-radio-input"
+                type="radio"
+                name="analysis-mode"
+                :checked="props.analysisMode === 'multi'"
+                :disabled="props.loading"
+                @change="setAnalysisMode('multi')"
+              />
+              <span>{{ t('multiAnalysis') }}</span>
+            </label>
+          </div>
         </div>
-      </div>
-
-      <div class="toolbar">
-        <span class="toolbar-label">{{ t('analysisMode') }}</span>
-        <div class="language-toggle" role="group" :aria-label="t('analysisMode')">
-          <button
-            type="button"
-            class="toggle-btn"
-            :class="{ active: props.analysisMode === 'single' }"
-            :disabled="props.loading"
-            @click="setAnalysisMode('single')"
+        <div class="toolbar-right">
+          <div
+            class="language-toggle language-toggle-compact"
+            role="group"
+            :aria-label="t('language')"
           >
-            {{ t('singleAnalysis') }}
-          </button>
-          <button
-            type="button"
-            class="toggle-btn"
-            :class="{ active: props.analysisMode === 'multi' }"
-            :disabled="props.loading"
-            @click="setAnalysisMode('multi')"
-          >
-            {{ t('multiAnalysis') }}
-          </button>
+            <button
+              type="button"
+              class="toggle-btn toggle-btn-compact"
+              :class="{ active: props.language === 'es' }"
+              :disabled="props.loading"
+              @click="setLanguage('es')"
+            >
+              ES
+            </button>
+            <button
+              type="button"
+              class="toggle-btn toggle-btn-compact"
+              :class="{ active: props.language === 'en' }"
+              :disabled="props.loading"
+              @click="setLanguage('en')"
+            >
+              EN
+            </button>
+          </div>
         </div>
       </div>
 
